@@ -1,31 +1,32 @@
 # Implementation Plan
 
-This proposed Unix-first Rust MVP preserves Park's public invariants: project-scoped identity, terminal-independent processes, durable separate logs, and script-friendly lifecycle control. The platform choice remains pending confirmation. Each phase ends with focused checks before the next phase begins.
+This proposed Unix-first Rust MVP preserves Park's public invariants: project-scoped identity, terminal-independent processes, durable separate logs, and script-friendly lifecycle control. Phase 0 records the Unix-only platform and toolchain decisions. Each phase ends with focused checks before the next phase begins.
 
-## Dependency Approval Gate
+## Phase 0: Foundation Decisions
 
-Do not add a dependency until its use is approved. `clap`, `serde`, and `serde_json` are treated as conventional CLI/serialization dependencies; all other third-party crates require explicit approval before they appear in `Cargo.toml`.
+Phase 0 establishes the platform, toolchain, and dependency policy before implementation. Do not add a dependency until its use is approved. `clap`, `serde`, and `serde_json` are conventional CLI/serialization dependencies; all other third-party crates require explicit approval before they appear in `Cargo.toml`.
 
-- [ ] Confirm the initial supported platform: Unix-only MVP or explicit Windows support.
-- [ ] Confirm the Rust toolchain policy: minimum supported Rust version and edition.
-- [ ] Approve the async/process strategy before implementation.
-- [ ] Approve the persistence strategy before implementation.
-- [ ] Approve Unix process-group and signal support before implementation.
-- [ ] Record each approved crate, version policy, purpose, and rejected alternative in this document.
+- [x] Confirm the initial supported platform: Unix-only MVP.
+- [x] Confirm the Rust toolchain policy: Edition 2024 and MSRV 1.85.
+- [x] Approve the async/process strategy: Tokio.
+- [x] Approve the persistence strategy: atomically replaced JSON metadata.
+- [x] Approve Unix process-group, signal, and advisory-lock support through `nix`.
+- [x] Record each approved crate, version policy, purpose, and rejected alternative in this document.
 
-Candidate dependency decisions requiring approval:
+Recorded decisions:
 
-- Async runtime and local IPC: `tokio`, versus synchronous threads plus standard-library Unix sockets.
-- Durable metadata: `rusqlite`, versus an atomically replaced JSON file backed by `serde_json`.
-- Unix process groups and signals: `nix`, versus a small internal FFI layer using `libc` bindings supplied by the standard platform interface.
-- Errors: `thiserror` or `anyhow`, versus small internal error enums and `std::error::Error` implementations.
-- File locking: `fs2`, versus a daemon lock implemented with exclusive file creation and platform calls.
-- Time formatting: `time` or `chrono`, versus a small internal formatter and epoch timestamps in JSON.
+- Initial platform: Unix-only MVP; Windows support is deferred.
+- Toolchain: Edition 2024 with MSRV 1.85.
+- Async runtime and local IPC: `tokio`; synchronous threads and standard-library sockets were rejected for the MVP.
+- Durable metadata: atomically replaced JSON backed by `serde_json`; `rusqlite` was rejected for the MVP.
+- Unix process groups, signals, and advisory locking: `nix`; internal FFI and a separate `fs2` dependency were rejected.
+- Errors: `thiserror`; `anyhow` and fully internal error types were rejected in favor of typed stable outcomes.
+- Time: epoch timestamps with internal formatting; `time` and `chrono` were rejected for the MVP.
 
 ## Phase 1: Workspace and Public Contract
 
 - [ ] Create the `park-cli` Cargo package with a `park` binary target.
-- [ ] Set the Rust edition and minimum supported Rust version after approval.
+- [ ] Set Edition 2024 and the minimum supported Rust version of 1.85.
 - [ ] Add only approved dependencies; commit `Cargo.lock` for reproducible application builds.
 - [ ] Define CLI parsing for `park <name> -- <command> [args...]` and explicit subcommands.
 - [ ] Reserve `run` as an optional alias without making it the primary invocation.
@@ -128,9 +129,15 @@ Candidate dependency decisions requiring approval:
 
 ## Approved Dependencies
 
-Populate this section only after explicit approval.
+Approved for the MVP. Use the latest release compatible with the MSRV unless a phase records a narrower version requirement.
 
-- [ ] `clap`: conventional CLI argument parsing; pending manifest creation.
-- [ ] `serde`: conventional structured data serialization; pending manifest creation.
-- [ ] `serde_json`: conventional JSON CLI output and record serialization; pending manifest creation.
-- [ ] No other dependencies approved yet.
+- [x] `clap`: conventional CLI argument parsing and subcommand boundaries.
+- [x] `serde`: conventional structured data serialization for persisted records and IPC payloads.
+- [x] `serde_json`: conventional JSON persistence and first-class JSON CLI output.
+- [x] `tokio`: asynchronous local IPC, child-process monitoring, timers, and independent output draining.
+- [x] `nix`: Unix process groups, signals, and kernel-managed advisory daemon locking.
+- [x] `thiserror`: typed internal errors with stable machine-readable classification and exit-code mapping.
+- [ ] `rusqlite`: rejected for the MVP; SQLite persistence may be reconsidered if registry querying or history requires it.
+- [ ] `fs2`: rejected for the MVP; advisory locking is provided through `nix`.
+- [ ] `anyhow`: rejected for the MVP; typed errors are required at public command boundaries.
+- [ ] `time` / `chrono`: rejected for the MVP; timestamps are persisted as epochs with internal formatting.
