@@ -19,7 +19,7 @@ Resolve the caller's working directory to a canonical path before every lookup o
 
 ## IPC and Daemon Startup
 
-The CLI connects through a per-user local Unix socket in the XDG runtime directory. On a missing socket, it launches or coordinates launch of the daemon, then retries the connection. Socket ownership, stale sockets, dead daemon PID markers, and concurrent first clients must be handled without allowing two active daemons to own the same registry.
+The CLI connects through a per-user local Unix socket in `$XDG_RUNTIME_DIR/park`, or a private `runtime/park` directory under durable state when the runtime variable is unavailable. On a missing socket, it launches or coordinates launch of the daemon, then retries the connection. Socket ownership, stale sockets, dead daemon PID markers, and concurrent first clients must be handled without allowing two active daemons to own the same registry.
 
 Use a request/response protocol with an operation, target process key, and structured result. Every response needs a machine-readable status so the CLI can render JSON without parsing human text. Streaming log follow is a long-lived IPC operation that forwards appended records and ends with the observed exit result when the process terminates.
 

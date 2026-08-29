@@ -64,15 +64,23 @@ Phase 2 implementation decisions:
 
 ## Phase 3: State Layout and Persistence
 
-- [ ] Resolve durable state under `XDG_STATE_HOME` or its XDG fallback.
-- [ ] Resolve the IPC directory under `XDG_RUNTIME_DIR`, with a documented safe fallback when it is unavailable.
-- [ ] Define stable on-disk directory and file naming that does not expose raw project paths as unsafe filenames.
-- [ ] Implement atomic record writes and crash-safe replacement semantics.
-- [ ] Create separate stdout and stderr files before spawning a process.
-- [ ] Persist process creation before reporting successful parking.
-- [ ] Retain terminal records and logs until `rm` or `clean` acts on them.
-- [ ] Implement startup reconciliation for records that claim to be active but whose process is gone.
-- [ ] Test interrupted writes, stale records, absent XDG variables, and process-name/path encoding.
+- [x] Resolve durable state under `XDG_STATE_HOME` or its XDG fallback.
+- [x] Resolve the IPC directory under `XDG_RUNTIME_DIR`, with a documented safe fallback when it is unavailable.
+- [x] Define stable on-disk directory and file naming that does not expose raw project paths as unsafe filenames.
+- [x] Implement atomic record writes and crash-safe replacement semantics.
+- [x] Create separate stdout and stderr files before spawning a process.
+- [x] Persist process creation before reporting successful parking.
+- [x] Retain terminal records and logs until `rm` or `clean` acts on them.
+- [x] Implement startup reconciliation for records that claim to be active but whose process is gone.
+- [x] Test interrupted writes, stale records, absent XDG variables, and process-name/path encoding.
+
+Phase 3 implementation decisions:
+
+- Durable state uses `$XDG_STATE_HOME/park`, falling back to `$HOME/.local/state/park`. Runtime state uses `$XDG_RUNTIME_DIR/park`, falling back to a private `runtime/park` directory under the durable state directory.
+- Records and logs are stored under separate `records` and `logs` directories. Filenames use a deterministic digest of the canonical project path and opaque name rather than exposing either value as a path component.
+- New records use an atomically linked completed temporary file; updates use a synced temporary file followed by atomic replacement. Temporary files are ignored during record discovery.
+- Log files are created independently with exclusive creation before a record is persisted. Terminal records and logs remain until explicit removal.
+- Reconciliation accepts an injected liveness check so platform-specific PID and process-group ownership checks can be added with the daemon in later phases.
 
 ## Phase 4: Daemon Ownership and Local IPC
 
