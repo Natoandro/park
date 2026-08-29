@@ -25,16 +25,24 @@ Recorded decisions:
 
 ## Phase 1: Workspace and Public Contract
 
-- [ ] Create the `park-cli` Cargo package with a `park` binary target.
-- [ ] Set Edition 2024 and the minimum supported Rust version of 1.85.
-- [ ] Add only approved dependencies; commit `Cargo.lock` for reproducible application builds.
-- [ ] Define CLI parsing for `park <name> -- <command> [args...]` and explicit subcommands.
-- [ ] Reserve `run` as an optional alias without making it the primary invocation.
-- [ ] Define a shared command-result type for human output, JSON output, and exit mapping.
-- [ ] Assign and document stable lifecycle exit codes: success, generic failure, missing record, duplicate record, and invalid state.
-- [ ] Add `--json` to inspection commands from the first implementation rather than retrofitting it.
-- [ ] Add unit tests for parsing ambiguous argument boundaries and JSON schema snapshots.
-- [ ] Run the project formatter, linter, unit tests, and build commands once tooling exists.
+- [x] Create the `park-cli` Cargo package with a `park` binary target.
+- [x] Set Edition 2024 and the minimum supported Rust version of 1.85.
+- [x] Add only approved dependencies; commit `Cargo.lock` for reproducible application builds.
+- [x] Define CLI parsing for `park <name> -- <command> [args...]` and explicit subcommands.
+- [x] Reserve `run` as an optional alias without making it the primary invocation.
+- [x] Define a shared command-result type for human output, JSON output, and exit mapping.
+- [x] Assign and document stable lifecycle exit codes: success, generic failure, missing record, duplicate record, and invalid state.
+- [x] Add `--json` to inspection commands from the first implementation rather than retrofitting it.
+- [x] Add unit tests for parsing ambiguous argument boundaries and JSON schema snapshots.
+- [x] Run the project formatter, linter, unit tests, and build commands once tooling exists.
+
+Phase 1 syntax decisions:
+
+- The readable subcommand form is canonical; each operation also accepts a `--<operation>` alias.
+- The short launch form is selected by a `--` separator immediately after the opaque name.
+- Names have no reserved-word or lexical validation. They are passed as one command-line argument, with normal shell/OS argument-boundary rules.
+- `run` is an optional explicit launch alias, not a requirement.
+- Lifecycle result codes are `0` for success, `1` for generic failure, `3` for missing records, `4` for duplicate records, and `5` for invalid state. CLI usage errors use `2`.
 
 ## Phase 2: Domain Model and Project Resolution
 
