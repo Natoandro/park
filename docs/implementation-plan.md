@@ -46,14 +46,21 @@ Phase 1 syntax decisions:
 
 ## Phase 2: Domain Model and Project Resolution
 
-- [ ] Model `ProcessKey` as canonical project path plus process name.
-- [ ] Model stored executable, exact argument vector, recorded working directory, timestamps, process identifiers, terminal outcome, and log locations.
-- [ ] Model legal states: `starting`, `running`, `stopping`, `exited`, `failed`, and `killed`.
-- [ ] Implement validated state transitions and reject invalid lifecycle operations explicitly.
-- [ ] Canonicalize the caller's current directory for all lookups and creations.
-- [ ] Make invocation-directory scoping the initial policy; do not add implicit Git-root behavior.
-- [ ] Add tests for relative paths, symlink aliases, duplicate names in one project, and identical names in distinct projects.
-- [ ] Verify records cannot be addressed by name alone.
+- [x] Model `ProcessKey` as canonical project path plus process name.
+- [x] Model stored executable, exact argument vector, recorded working directory, timestamps, process identifiers, terminal outcome, and log locations.
+- [x] Model legal states: `starting`, `running`, `stopping`, `exited`, `failed`, and `killed`.
+- [x] Implement validated state transitions and reject invalid lifecycle operations explicitly.
+- [x] Canonicalize the caller's current directory for all lookups and creations.
+- [x] Make invocation-directory scoping the initial policy; do not add implicit Git-root behavior.
+- [x] Add tests for relative paths, symlink aliases, duplicate names in one project, and identical names in distinct projects.
+- [x] Verify records cannot be addressed by name alone.
+
+Phase 2 implementation decisions:
+
+- `ProjectPath` is constructed only from canonicalized existing directories. The current working directory is resolved directly; Git-root discovery is not performed.
+- `ProcessKey` owns the canonical `ProjectPath` and opaque process name. Registry access accepts only a complete `ProcessKey`, never a name alone.
+- New records begin in `starting`; valid transitions cover successful startup, graceful stopping, natural failure, and forceful termination. Terminal states cannot transition further.
+- The in-memory registry rejects duplicate canonical keys while allowing identical names under distinct project paths. Durable storage is deferred to Phase 3.
 
 ## Phase 3: State Layout and Persistence
 
