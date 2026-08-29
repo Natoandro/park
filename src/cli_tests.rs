@@ -1,0 +1,93 @@
+use super::*;
+
+fn parse(args: &[&str]) -> Invocation {
+    parse_invocation(args.iter().copied()).expect("arguments should parse")
+}
+
+#[test]
+fn parses_short_launch_and_preserves_command_arguments() {
+    assert_eq!(
+        parse(&["park", "dev", "--", "cargo", "run", "--release"]),
+        Invocation::Launch {
+            name: "dev".into(),
+            command: vec!["cargo".into(), "run".into(), "--release".into()],
+        }
+    );
+}
+
+#[test]
+fn parses_operation_word_as_a_name_when_launch_separator_follows() {
+    assert_eq!(
+        parse(&["park", "status", "--", "./server"]),
+        Invocation::Launch {
+            name: "status".into(),
+            command: vec!["./server".into()],
+        }
+    );
+}
+
+#[test]
+fn parses_command_arguments_that_begin_with_a_dash() {
+    assert_eq!(
+        parse(&["park", "dev", "--", "-custom-command", "--flag"]),
+        Invocation::Launch {
+            name: "dev".into(),
+            command: vec!["-custom-command".into(), "--flag".into()],
+        }
+    );
+}
+
+#[test]
+fn parses_a_dash_prefixed_name() {
+    assert_eq!(
+        parse(&["park", "-status", "--", "./server"]),
+        Invocation::Launch {
+            name: "-status".into(),
+            command: vec!["./server".into()],
+        }
+    );
+}
+
+#[test]
+fn parses_status_and_json() {
+    assert_eq!(
+        parse(&["park", "status", "dev", "--json"]),
+        Invocation::Operation(Operation::Status {
+            name: "dev".into(),
+            json: true,
+        })
+    );
+}
+
+#[test]
+fn parses_long_operation_alias() {
+    assert_eq!(
+        parse(&["park", "--status", "dev"]),
+        Invocation::Operation(Operation::Status {
+            name: "dev".into(),
+            json: false,
+        })
+    );
+}
+
+#[test]
+fn distinguishes_a_long_operation_alias_from_a_dash_prefixed_name() {
+    assert_eq!(
+        parse(&["park", "--status", "--", "./server"]),
+        Invocation::Launch {
+            name: "--status".into(),
+            command: vec!["./server".into()],
+        }
+    );
+}
+
+#[test]
+fn parses_explicit_run_alias() {
+    assert_eq!(
+        parse(&["park", "run", "dev", "--", "cargo", "run"]),
+        Invocation::Launch {
+            name: "dev".into(),
+            command: vec!["cargo".into(), "run".into()],
+        }
+    );
+}

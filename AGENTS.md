@@ -9,3 +9,4 @@
 - Preserve stdout and stderr separately, retain records and logs after exit, and make lifecycle operations target the process group where the platform supports it so child processes are not orphaned.
 - Human output must remain script-friendly and non-interactive. JSON output and stable lifecycle exit-code semantics are first-class public behavior.
 - Use XDG state/runtime directories rather than hard-coded home-directory paths. A daemon should start on demand and recover safely from stale runtime state.
+- Keep source files focused and preferably under roughly 300 lines, including tests. Split files that exceed this size or combine unrelated responsibilities, while preferring a small number of cohesive modules over arbitrary fragmentation.
