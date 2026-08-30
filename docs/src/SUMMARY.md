@@ -2,6 +2,7 @@
 
 - [Introduction](introduction.md)
 - [Installation](installation.md)
+- [AI Agent Integration](ai-agents.md)
 - [Quick Start](quick-start.md)
 - [Commands](commands/index.md)
   - [Launch](commands/launch.md)

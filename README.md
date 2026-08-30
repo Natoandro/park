@@ -26,6 +26,34 @@ cargo install park-cli
 
 </details>
 
+## AI Agent Integration
+
+Park provides a canonical skill for coding agents through the [`npx skills`](https://skills.sh/)
+CLI. The skill teaches agents to inspect existing records, use project-scoped
+names, wait for readiness, read retained logs, and avoid disrupting processes
+owned by another actor.
+
+Install it for OpenCode in the current project:
+
+```bash
+npx skills add Natoandro/park --skill park -a opencode
+```
+
+Install it globally instead:
+
+```bash
+npx skills add Natoandro/park --skill park -g -a opencode
+```
+
+Use it for one session without installing it:
+
+```bash
+npx skills use Natoandro/park --skill park --agent opencode
+```
+
+See [AI Agent Integration](docs/src/ai-agents.md) for other supported agents,
+updates, removal, and the recommended workflow.
+
 ## Quick Start
 
 From a project directory, park a long-running command:

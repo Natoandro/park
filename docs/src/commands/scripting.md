@@ -5,6 +5,9 @@ coding-agent workflows. Commands resolve the current project directory, and
 the daemon is started on demand. Use the readable subcommand forms and check
 the process exit status rather than parsing human-readable messages.
 
+For installation and the complete agent workflow, see [AI Agent
+Integration](../ai-agents.md).
+
 ## JSON Output
 
 `ps`, `status`, and `logs` support `--json`:
