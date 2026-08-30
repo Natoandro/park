@@ -4,9 +4,27 @@ Park is a project-scoped background process manager for local development. It ru
 
 The Rust package is `park-cli`; the installed executable is `park`.
 
+> [!NOTE]
+> Park is under active development and is not yet published to crates.io.
+
+## Installation
+
+Install the latest development version directly from GitHub:
+
+```bash
+cargo install --git https://github.com/Natoandro/park.git park-cli
+```
+
+For a local checkout, use `cargo install --path .` instead.
+
+<details>
+<summary>After publication to crates.io</summary>
+
 ```bash
 cargo install park-cli
 ```
+
+</details>
 
 ## Quick Start
 
