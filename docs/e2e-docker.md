@@ -5,8 +5,9 @@ container. The container build stage provides Rust and Cargo to compile the
 application and runner. The final runtime stage contains only the selected
 `park` artifact, the `park-e2e` runner, and their operating-system runtime.
 
-The first implemented scenario is `PARK-CLI-001` in `src/bin/park-e2e.rs`. It
-does not use `cargo test` or the existing `tests/daemon_integration.rs` target.
+The `PARK-CLI-*` scenarios in `src/bin/park-e2e.rs` cover the foundation CLI
+stories. The runner does not use `cargo test` or the existing
+`tests/daemon_integration.rs` target.
 
 ## Files
 
@@ -96,7 +97,7 @@ scripts/e2e.sh --debug
 children. It is recommended because Park intentionally creates detached
 daemon, supervisor, and managed-process descendants.
 
-The runner currently executes `PARK-CLI-001`:
+The runner executes all registered scenarios by default:
 
 ```bash
 docker run --rm --init park-e2e:local

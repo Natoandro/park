@@ -129,6 +129,34 @@ pub fn expect_success(operation: &str, output: &Output) -> Result<(), String> {
     ))
 }
 
+pub fn expect_exit(operation: &str, output: &Output, expected: i32) -> Result<(), String> {
+    let actual = output.status.code();
+    if actual == Some(expected) {
+        return Ok(());
+    }
+    Err(format!(
+        "{operation} exited with {actual:?}, expected {expected}; stdout: {}; stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    ))
+}
+
+pub fn expect_stderr_nonempty(operation: &str, output: &Output) -> Result<(), String> {
+    if !output.stderr.is_empty() {
+        return Ok(());
+    }
+    Err(format!("{operation} did not write a diagnostic to stderr"))
+}
+
+pub fn parse_json(operation: &str, output: &Output) -> Result<serde_json::Value, String> {
+    serde_json::from_slice(&output.stdout).map_err(|error| {
+        format!(
+            "{operation} did not return valid JSON: {error}; stdout: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    })
+}
+
 pub fn expect_contains(value: &str, expected: &str) -> Result<(), String> {
     if value.contains(expected) {
         return Ok(());
