@@ -33,6 +33,15 @@ does not use `cargo test` or the existing `tests/daemon_integration.rs` target.
 
 ## Build The Image
 
+The recommended entry point is the repository wrapper:
+
+```bash
+scripts/e2e.sh
+```
+
+It builds the release image and runs it with the standard isolation flags.
+Use `--debug` for a debug artifact and `--no-build` to reuse an existing image.
+
 Build from the repository root:
 
 ```bash
@@ -72,6 +81,15 @@ Run the standalone runner with a disposable container:
 
 ```bash
 docker run --rm --init park-e2e:local
+```
+
+Equivalent wrapper commands are:
+
+```bash
+scripts/e2e.sh --list
+scripts/e2e.sh --filter PARK-CLI-001
+scripts/e2e.sh --tag smoke
+scripts/e2e.sh --debug
 ```
 
 `--init` gives the container a minimal PID 1 that forwards signals and reaps
@@ -184,6 +202,8 @@ without builder-level locking.
 ## Test Design Rules
 
 - Map every test to a `PARK-*` story in `docs/e2e-user-stories.md`.
+- Add one scenario file under `src/bin/park-e2e/scenarios/`; `build.rs` discovers
+  it automatically.
 - Use a fresh XDG state/runtime root per test or test fixture.
 - Invoke the binary selected by `PARK_BIN`; do not depend on a host-installed
   binary or `CARGO_BIN_EXE_park`.
