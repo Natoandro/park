@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Error as JsonError;
@@ -224,6 +225,33 @@ impl Storage {
         Ok(())
     }
 
+    pub(crate) fn save_record_if_unchanged(
+        &self,
+        expected: &ProcessRecord,
+        updated: &ProcessRecord,
+    ) -> Result<bool, StorageError> {
+        self.paths.ensure_directories()?;
+        self.validate_record(updated)?;
+        let expected_payload = serde_json::to_vec_pretty(expected)?;
+        let updated_payload = serde_json::to_vec_pretty(updated)?;
+        let connection = self.open_connection()?;
+        let changed = connection
+            .execute(
+                "UPDATE process_records SET record_json = ?1
+                 WHERE key_digest = ?2 AND record_json = ?3",
+                params![
+                    updated_payload,
+                    files::key_digest(updated.key()),
+                    expected_payload
+                ],
+            )
+            .map_err(|source| StorageError::Sqlite {
+                operation: "conditionally save SQLite process record",
+                source,
+            })?;
+        Ok(changed != 0)
+    }
+
     pub fn load_record(&self, key: &ProcessKey) -> Result<Option<ProcessRecord>, StorageError> {
         let connection = self.open_connection()?;
         let row = connection
@@ -346,10 +374,19 @@ impl Storage {
 
     fn open_connection(&self) -> Result<Connection, StorageError> {
         self.paths.ensure_directories()?;
-        Connection::open(self.paths.database_path()).map_err(|source| StorageError::Sqlite {
-            operation: "open SQLite database",
-            source,
-        })
+        let connection = Connection::open(self.paths.database_path()).map_err(|source| {
+            StorageError::Sqlite {
+                operation: "open SQLite database",
+                source,
+            }
+        })?;
+        connection
+            .busy_timeout(Duration::from_secs(1))
+            .map_err(|source| StorageError::Sqlite {
+                operation: "configure SQLite busy timeout",
+                source,
+            })?;
+        Ok(connection)
     }
 
     pub fn remove_record(&self, key: &ProcessKey, keep_logs: bool) -> Result<(), StorageError> {
@@ -401,8 +438,16 @@ impl Storage {
                 ProcessState::Exited | ProcessState::Failed | ProcessState::Killed => continue,
             }
             let key = record.key().clone();
-            self.save_record(&record)?;
-            reconciled.push(key);
+            if self.save_record_if_unchanged(
+                &self
+                    .load_record(&key)?
+                    .ok_or_else(|| StorageError::RecordMissing {
+                        path: self.paths.database_path().to_path_buf(),
+                    })?,
+                &record,
+            )? {
+                reconciled.push(key);
+            }
         }
         Ok(reconciled)
     }

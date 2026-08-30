@@ -170,14 +170,22 @@ Phase 7 implementation decisions:
 
 ## Phase 8: Agent Coordination and Hardening
 
-- [ ] Implement `wait --state`, `wait --match`, and `wait --exit` with timeout handling.
-- [ ] Define whether `--match` searches historical logs, new logs, or both, then test that contract.
-- [ ] Reconcile records after daemon crash, abrupt client disconnect, and machine reboot.
-- [ ] Guard process ownership checks against PID reuse using available start-time/process-group data.
-- [ ] Ensure slow IPC readers cannot stall child-output writers or daemon lifecycle monitoring.
-- [ ] Add integration tests that invoke the installed binary against isolated XDG state/runtime directories.
-- [ ] Add documentation for state locations, cleanup, exit codes, JSON schemas, and known platform limits.
+- [x] Implement `wait --state`, `wait --match`, and `wait --exit` with timeout handling.
+- [x] Define whether `--match` searches historical logs, new logs, or both, then test that contract.
+- [x] Reconcile records after daemon crash, abrupt client disconnect, and machine reboot.
+- [x] Guard process ownership checks against PID reuse using available start-time/process-group data.
+- [x] Ensure slow IPC readers cannot stall child-output writers or daemon lifecycle monitoring.
+- [x] Add integration tests that invoke the installed binary against isolated XDG state/runtime directories.
+- [x] Add documentation for state locations, cleanup, exit codes, JSON schemas, and known platform limits.
 - [ ] Add CI only after the test, format, lint, and toolchain commands are established.
+
+Phase 8 implementation decisions:
+
+- `wait` requires exactly one condition. State names are the six persisted lowercase state names. `--match` searches both complete log files, so historical output and output appended after restart/start are included. An empty pattern matches immediately.
+- Wait timeouts use `ms`, `s`, or `m` suffixes and return the existing generic failure status on expiry. Wait uses streaming heartbeat frames, which lets the daemon observe client disconnects without blocking lifecycle operations.
+- Monitor and reconciliation updates use compare-and-swap against the record snapshot they observed, preventing stale terminal updates from overwriting a newer start or restart. SQLite connections wait briefly on transient locks.
+- Linux ownership checks validate PID start time, process group, and session. Descendant-only groups are recognized by matching the recorded group/session, while a reused bare group ID is not trusted. Non-Linux Unix ownership verification remains a documented limitation.
+- IPC request reads and response writes have finite deadlines. Capture tasks remain independent of IPC clients.
 
 ## Deferred Work
 

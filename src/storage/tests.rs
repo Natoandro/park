@@ -135,7 +135,7 @@ fn round_trips_exact_non_utf8_process_arguments() {
         logs,
     );
     record
-        .mark_running(11, 123, Some(123), None)
+        .mark_running(11, 123, Some(123), Some(123))
         .expect("record should become running");
     storage
         .create_record(&record)
@@ -163,7 +163,7 @@ fn atomically_persists_and_replaces_records() {
     ));
 
     record
-        .mark_running(11, 123, Some(123), None)
+        .mark_running(11, 123, Some(123), Some(123))
         .expect("record should become running");
     storage
         .save_record(&record)
@@ -184,6 +184,43 @@ fn atomically_persists_and_replaces_records() {
 }
 
 #[test]
+fn conditional_record_saves_reject_stale_observations() {
+    let (_root, storage, project) = test_storage();
+    let record = record(&storage, &project, OsString::from("dev"));
+    storage
+        .create_record(&record)
+        .expect("record should be created");
+
+    let mut running = record.clone();
+    running
+        .mark_running(11, 123, Some(123), Some(123))
+        .expect("record should become running");
+    assert!(
+        storage
+            .save_record_if_unchanged(&record, &running)
+            .expect("conditional save should succeed")
+    );
+
+    let mut stale = record.clone();
+    stale
+        .mark_spawn_failed(12, "stale update")
+        .expect("stale record should be locally valid");
+    assert!(
+        !storage
+            .save_record_if_unchanged(&record, &stale)
+            .expect("stale conditional save should be checked")
+    );
+    assert_eq!(
+        storage
+            .load_record(running.key())
+            .expect("record should load")
+            .expect("record should exist")
+            .state(),
+        ProcessState::Running
+    );
+}
+
+#[test]
 fn retains_logs_and_rejects_removal_of_active_records() {
     let (_root, storage, project) = test_storage();
     let mut record = record(&storage, &project, OsString::from("dev"));
@@ -196,7 +233,7 @@ fn retains_logs_and_rejects_removal_of_active_records() {
     ));
 
     record
-        .mark_running(11, 123, Some(123), None)
+        .mark_running(11, 123, Some(123), Some(123))
         .expect("record should become running");
     record
         .mark_terminated(12, Some(0), None)
@@ -223,7 +260,7 @@ fn reconciles_dead_active_records_without_discarding_logs() {
     let (_root, storage, project) = test_storage();
     let mut record = record(&storage, &project, OsString::from("dev"));
     record
-        .mark_running(11, 123, Some(123), None)
+        .mark_running(11, 123, Some(123), Some(123))
         .expect("record should become running");
     let logs = record.logs().clone();
     storage

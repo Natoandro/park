@@ -91,3 +91,45 @@ fn parses_explicit_run_alias() {
         }
     );
 }
+
+#[test]
+fn parses_wait_conditions_and_durations() {
+    assert_eq!(
+        parse(&[
+            "park",
+            "wait",
+            "dev",
+            "--state",
+            "running",
+            "--timeout",
+            "250ms"
+        ]),
+        Invocation::Operation(Operation::Wait(WaitArgs {
+            name: "dev".into(),
+            state: Some(ProcessState::Running),
+            match_text: None,
+            exit: false,
+            timeout: Some(250),
+        }))
+    );
+    assert_eq!(
+        parse(&["park", "wait", "dev", "--match", "ready", "--timeout", "2s"]),
+        Invocation::Operation(Operation::Wait(WaitArgs {
+            name: "dev".into(),
+            state: None,
+            match_text: Some("ready".to_owned()),
+            exit: false,
+            timeout: Some(2_000),
+        }))
+    );
+}
+
+#[test]
+fn requires_one_wait_condition() {
+    assert!(parse_invocation(["park", "wait", "dev"] as [&str; 3]).is_err());
+    assert!(
+        parse_invocation(["park", "wait", "dev", "--exit", "--state", "running"] as [&str; 6])
+            .is_err()
+    );
+    assert!(parse_invocation(["park", "wait", "dev", "--state", "unknown"] as [&str; 5]).is_err());
+}

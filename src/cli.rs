@@ -1,6 +1,9 @@
 use std::ffi::OsString;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgGroup, Args, Parser, Subcommand};
+use std::num::ParseIntError;
+
+use crate::lifecycle::ProcessState;
 
 /// The operation requested by a user, before a daemon handles it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,10 +63,10 @@ pub struct LogsArgs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WaitArgs {
     pub name: OsString,
-    pub state: Option<String>,
+    pub state: Option<ProcessState>,
     pub match_text: Option<String>,
     pub exit: bool,
-    pub timeout: Option<String>,
+    pub timeout: Option<u64>,
 }
 
 #[derive(Debug, Parser)]
@@ -167,17 +170,40 @@ struct LogsCliArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(group(ArgGroup::new("wait-condition").required(true)))]
 struct WaitCliArgs {
     #[arg(value_name = "NAME", allow_hyphen_values = true)]
     name: OsString,
-    #[arg(long, value_name = "STATE", group = "wait-condition")]
-    state: Option<String>,
+    #[arg(long, value_name = "STATE", group = "wait-condition", value_parser = parse_state)]
+    state: Option<ProcessState>,
     #[arg(long = "match", value_name = "TEXT", group = "wait-condition")]
     match_text: Option<String>,
     #[arg(long, group = "wait-condition")]
     exit: bool,
-    #[arg(long, value_name = "DURATION")]
-    timeout: Option<String>,
+    #[arg(long, value_name = "DURATION", value_parser = parse_duration)]
+    timeout: Option<u64>,
+}
+
+fn parse_state(value: &str) -> Result<ProcessState, String> {
+    value.parse()
+}
+
+fn parse_duration(value: &str) -> Result<u64, String> {
+    let (number, multiplier) = if let Some(value) = value.strip_suffix("ms") {
+        (value, 1_u64)
+    } else if let Some(value) = value.strip_suffix('s') {
+        (value, 1_000)
+    } else if let Some(value) = value.strip_suffix('m') {
+        (value, 60_000)
+    } else {
+        return Err("invalid duration; use a non-negative value ending in ms, s, or m".to_owned());
+    };
+    let number = number
+        .parse::<u64>()
+        .map_err(|error: ParseIntError| error.to_string())?;
+    number
+        .checked_mul(multiplier)
+        .ok_or_else(|| "duration is too large".to_owned())
 }
 
 /// Parse the public CLI grammar without imposing lexical restrictions on names.

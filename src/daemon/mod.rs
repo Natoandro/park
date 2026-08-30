@@ -8,6 +8,7 @@ use nix::errno::Errno;
 use nix::fcntl::{Flock, FlockArg};
 use thiserror::Error;
 use tokio::net::{UnixListener, UnixStream};
+use tokio::time::{Duration, timeout};
 
 use crate::ipc::{
     IpcError, IpcOperation, IpcRequest, IpcResponse, PROTOCOL_VERSION, read_request, record_value,
@@ -23,9 +24,11 @@ mod launch;
 mod logs;
 mod monitor;
 mod process_identity;
+mod wait;
 
 pub const INTERNAL_DAEMON_ARGUMENT: &str = "--internal-daemon";
 pub const INTERNAL_SUPERVISOR_ARGUMENT: &str = "--internal-supervisor";
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug)]
 pub struct DaemonLock {
@@ -168,9 +171,18 @@ pub async fn run(paths: StoragePaths) -> Result<bool, DaemonError> {
 }
 
 async fn serve_connection(mut stream: UnixStream, state: Arc<DaemonState>) -> Result<(), IpcError> {
-    let request = match read_request(&mut stream).await {
-        Ok(request) => request,
-        Err(error) => {
+    let request_result = timeout(REQUEST_TIMEOUT, read_request(&mut stream)).await;
+    let request = match request_result {
+        Err(_) => {
+            let response = IpcResponse::error(
+                0,
+                ResultStatus::Failure,
+                "timed out waiting for an IPC request",
+            );
+            return write_response(&mut stream, &response).await;
+        }
+        Ok(Ok(request)) => request,
+        Ok(Err(error)) => {
             let response = IpcResponse::error(0, ResultStatus::Failure, error.to_string());
             return write_response(&mut stream, &response).await;
         }
@@ -183,6 +195,11 @@ async fn serve_connection(mut stream: UnixStream, state: Arc<DaemonState>) -> Re
             key,
             options,
         } => logs::serve(&state, request_id, key, options, &mut stream).await,
+        DispatchResponse::Wait {
+            request_id,
+            key,
+            options,
+        } => wait::serve(&state, request_id, key, options, &mut stream).await,
     }
 }
 
@@ -192,6 +209,11 @@ enum DispatchResponse {
         request_id: u64,
         key: ProcessKey,
         options: logs::LogOptions,
+    },
+    Wait {
+        request_id: u64,
+        key: ProcessKey,
+        options: wait::WaitOptions,
     },
 }
 
@@ -241,6 +263,22 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
                 grep,
                 stdout,
                 stderr,
+            },
+        },
+        IpcOperation::Wait {
+            key,
+            state: expected_state,
+            match_text,
+            exit,
+            timeout_ms,
+        } => DispatchResponse::Wait {
+            request_id,
+            key,
+            options: wait::WaitOptions {
+                expected_state,
+                match_text,
+                exit,
+                timeout_ms,
             },
         },
         operation @ (IpcOperation::Stop { .. }
@@ -311,6 +349,19 @@ fn canonicalize_operation(
             stdout,
             stderr,
         }),
+        IpcOperation::Wait {
+            key,
+            state,
+            match_text,
+            exit,
+            timeout_ms,
+        } => Ok(IpcOperation::Wait {
+            key: canonical_key(key)?,
+            state,
+            match_text,
+            exit,
+            timeout_ms,
+        }),
         IpcOperation::Stop { key, force } => Ok(IpcOperation::Stop {
             key: canonical_key(key)?,
             force,
@@ -365,6 +416,11 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
             request.request_id,
             ResultStatus::Failure,
             "log requests require the daemon dispatcher",
+        ),
+        IpcOperation::Wait { .. } => IpcResponse::error(
+            request.request_id,
+            ResultStatus::Failure,
+            "wait requests require the daemon dispatcher",
         ),
         IpcOperation::Ps { project_path } => {
             let records = match storage.list_records() {
@@ -428,7 +484,7 @@ fn storage_error(request_id: u64, error: StorageError) -> IpcResponse {
 }
 
 fn record_is_alive(record: &ProcessRecord) -> bool {
-    process_identity::matches_record(record)
+    process_identity::owns_group(record)
 }
 
 fn epoch_seconds() -> u64 {

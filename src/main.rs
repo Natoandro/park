@@ -5,8 +5,8 @@ use park_cli::{
     IpcLogOptions, Operation, ResultStatus, StoragePaths, parse_invocation, render_json,
     request_for_clean, request_for_launch, request_for_logs, request_for_ps, request_for_remove,
     request_for_restart, request_for_signal, request_for_start, request_for_status,
-    request_for_stop, request_with_daemon_start, resolve_current_project, run_daemon,
-    stream_request_with_daemon_start,
+    request_for_stop, request_for_wait, request_with_daemon_start, resolve_current_project,
+    run_daemon, stream_request_with_daemon_start,
 };
 use serde_json::Value;
 
@@ -234,11 +234,31 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
             request_for_remove(1, park_cli::ProcessKey::new(project, name), keep_logs)
         }
         Invocation::Operation(Operation::Clean) => request_for_clean(1),
-        Invocation::Operation(Operation::Wait(_)) => {
-            return CommandResult::error(
-                ResultStatus::Failure,
-                "operation wait is not implemented yet",
+        Invocation::Operation(Operation::Wait(args)) => {
+            let request = request_for_wait(
+                1,
+                park_cli::ProcessKey::new(project, args.name),
+                args.state,
+                args.match_text,
+                args.exit,
+                args.timeout,
             );
+            let response = match stream_request_with_daemon_start(&paths, &request, |_| {}).await {
+                Ok(response) => response,
+                Err(error) => {
+                    return CommandResult::error(ResultStatus::Failure, error.to_string());
+                }
+            };
+            if !response.result.ok {
+                return response.result;
+            }
+            let Some(data) = response.result.data else {
+                return CommandResult::error(
+                    ResultStatus::Failure,
+                    "wait response is missing data",
+                );
+            };
+            return CommandResult::success(data.get("record").cloned(), None);
         }
     };
 

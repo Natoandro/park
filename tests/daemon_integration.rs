@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
@@ -331,6 +331,102 @@ fn reads_empty_retained_logs_successfully() {
     let logs = environment.run(&["logs", "empty"]);
     assert!(logs.status.success(), "stderr: {:?}", logs.stderr);
     assert!(logs.stdout.is_empty());
+}
+
+#[test]
+fn waits_for_state_exit_and_literal_output_matches() {
+    let environment = TestEnvironment::new();
+    let running = environment.run(&["waiting", "--", "/bin/sh", "-c", "sleep 1"]);
+    assert!(running.status.success(), "stderr: {:?}", running.stderr);
+
+    let running_wait = environment.run(&["wait", "waiting", "--state", "running"]);
+    assert!(
+        running_wait.status.success(),
+        "stderr: {:?}",
+        running_wait.stderr
+    );
+    let running_record: Value =
+        serde_json::from_slice(&running_wait.stdout).expect("wait result should be JSON");
+    assert_eq!(running_record["state"], "running");
+
+    let matched = environment.run(&[
+        "matching",
+        "--",
+        "/bin/sh",
+        "-c",
+        "sleep .1; printf ready >&2; exit 7",
+    ]);
+    assert!(matched.status.success(), "stderr: {:?}", matched.stderr);
+    let match_wait = environment.run(&["wait", "matching", "--match", "ready", "--timeout", "2s"]);
+    assert!(
+        match_wait.status.success(),
+        "stderr: {:?}",
+        match_wait.stderr
+    );
+    let match_record: Value =
+        serde_json::from_slice(&match_wait.stdout).expect("match result should be JSON");
+    assert_eq!(match_record["state"], "exited");
+
+    let exit_wait = environment.run(&["wait", "matching", "--exit"]);
+    assert!(exit_wait.status.success(), "stderr: {:?}", exit_wait.stderr);
+    let exit_record: Value =
+        serde_json::from_slice(&exit_wait.stdout).expect("exit result should be JSON");
+    assert_eq!(exit_record["exit_code"], 7);
+
+    let stop = environment.run(&["stop", "waiting", "--force"]);
+    assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
+}
+
+#[test]
+fn wait_times_out_and_reports_missing_records() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["timeout", "--", "/bin/sleep", "1"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+
+    let timeout = environment.run(&["wait", "timeout", "--exit", "--timeout", "1ms"]);
+    assert_eq!(
+        timeout.status.code(),
+        Some(1),
+        "stderr: {:?}",
+        timeout.stderr
+    );
+    assert!(String::from_utf8_lossy(&timeout.stderr).contains("timed out"));
+
+    let missing = environment.run(&["wait", "missing", "--exit", "--timeout", "1ms"]);
+    assert_eq!(
+        missing.status.code(),
+        Some(3),
+        "stderr: {:?}",
+        missing.stderr
+    );
+
+    let stop = environment.run(&["stop", "timeout", "--force"]);
+    assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
+}
+
+#[test]
+fn disconnected_wait_client_does_not_block_daemon_operations() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["disconnect", "--", "/bin/sleep", "1"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+
+    let mut waiter = Command::new(env!("CARGO_BIN_EXE_park"))
+        .args(["wait", "disconnect", "--exit"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("XDG_STATE_HOME", environment.root.join("state"))
+        .env("XDG_RUNTIME_DIR", environment.root.join("runtime"))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("wait client should start");
+    thread::sleep(Duration::from_millis(150));
+    waiter.kill().expect("wait client should be killable");
+    let _ = waiter.wait();
+
+    let status = environment.run(&["status", "disconnect", "--json"]);
+    assert!(status.status.success(), "stderr: {:?}", status.stderr);
+    let stop = environment.run(&["stop", "disconnect", "--force"]);
+    assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
 }
 
 #[test]

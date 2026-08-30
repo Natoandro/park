@@ -166,9 +166,7 @@ impl ProcessRecord {
         }
         let active = matches!(self.state, ProcessState::Running | ProcessState::Stopping);
         let terminal = self.state.is_terminal();
-        if active
-            && (self.pid.is_none() || self.process_group_id.is_none() || self.started_at.is_none())
-        {
+        if active && !active_identity_is_complete(self) {
             return Err(ProcessRecordValidationError::ActiveFields);
         }
         if self.state == ProcessState::Starting
@@ -316,6 +314,17 @@ fn identifiers_are_valid(
         && process_group_id.is_none_or(valid_id)
         && process_start_time.is_none_or(|start_time| start_time > 0)
         && (pid.is_some() == process_group_id.is_some())
+}
+
+fn active_identity_is_complete(record: &ProcessRecord) -> bool {
+    if record.pid.is_none() || record.process_group_id.is_none() || record.started_at.is_none() {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    if record.process_start_time.is_none() {
+        return false;
+    }
+    true
 }
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]

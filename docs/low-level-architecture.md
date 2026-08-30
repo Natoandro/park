@@ -42,6 +42,8 @@ Launch reserves its complete process key in the daemon for the check/create/spaw
 
 `restart` stops the current group when necessary, then spawns from the preserved executable, arguments, and working directory. `start` is restricted to retained terminal records. Both operations reset the lifecycle fields and append new output to the existing stream logs. Lifecycle operations serialize on an individual record so concurrent stop, restart, signal, and remove requests cannot race. `rm` is distinct from `stop`: it removes metadata and, unless `--keep-logs` is set, log files only after the process is no longer active. `clean` removes terminal records and their logs only when their recorded process group is also gone; active records are never eligible.
 
+`wait --state` compares an exact state, `wait --exit` matches every terminal state, and `wait --match` searches both append-only log streams for a literal byte substring. Match searches include historical output and later appended output from restart/start cycles. Wait is a streaming IPC operation with periodic bounded heartbeat frames; it checks immediately, polls at a fixed interval, returns the matching record, and reports a generic failure on timeout.
+
 ## Logging
 
 Write stdout and stderr separately with append-only records. The combined `logs` view uses the MVP's deterministic stdout-then-stderr ordering because capture files do not carry a shared event sequence. `--stdout` and `--stderr` read their respective streams. `--grep` is a literal substring filter on retained lines, applied before `--tail` or `--head`; `--follow` sends bounded IPC frames for the initial retained output and appended output, then reports a clean terminal status. Follow filters apply to the initial snapshot; later output is streamed without head/tail limits.
@@ -65,3 +67,5 @@ The MVP deliberately keeps process metadata in SQLite and raw stdout/stderr in a
 - Persist state changes through SQLite transactions so a daemon or power failure cannot expose a partial record mutation. SQLite journaling and its database file remain in the private user state directory.
 - Treat a machine reboot as a reconciliation event, not an automatic restart request. Preserve the record and logs, then expose the process as no longer running.
 - Keep log readers and slow IPC clients from blocking child-output draining; otherwise a verbose command can deadlock on full pipes.
+- Bound request reads and response writes. A disconnected or slow wait/follow client must not hold a lifecycle lock or prevent capture and monitoring tasks from completing.
+- On Linux, ownership-sensitive actions validate the recorded PID start time, process group, and session. If the group leader exits while descendants remain, the recorded session/group combination is used conservatively for escalation; a bare reused PGID is never sufficient.

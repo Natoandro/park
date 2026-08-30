@@ -5,13 +5,16 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
+use tokio::time::{Duration, timeout};
 
+use crate::lifecycle::ProcessState;
 use crate::process::{ProcessKey, ProcessRecord};
 use crate::project::ProjectPath;
 use crate::result::{CommandResult, ResultStatus};
 
 pub const PROTOCOL_VERSION: u16 = 1;
 const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
+const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IpcRequest {
@@ -67,6 +70,13 @@ pub enum IpcOperation {
         keep_logs: bool,
     },
     Clean,
+    Wait {
+        key: ProcessKey,
+        state: Option<ProcessState>,
+        match_text: Option<String>,
+        exit: bool,
+        timeout_ms: Option<u64>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -260,9 +270,15 @@ pub async fn write_response(
 ) -> Result<(), IpcError> {
     let mut payload = serde_json::to_vec(response).map_err(IpcError::Serialize)?;
     payload.push(b'\n');
-    stream
-        .write_all(&payload)
+    timeout(WRITE_TIMEOUT, stream.write_all(&payload))
         .await
+        .map_err(|_| IpcError::Io {
+            operation: "send daemon response",
+            source: std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "IPC response write timed out",
+            ),
+        })?
         .map_err(|source| IpcError::Io {
             operation: "send daemon response",
             source,
@@ -363,6 +379,27 @@ pub fn request_for_clean(request_id: u64) -> IpcRequest {
         version: PROTOCOL_VERSION,
         request_id,
         operation: IpcOperation::Clean,
+    }
+}
+
+pub fn request_for_wait(
+    request_id: u64,
+    key: ProcessKey,
+    state: Option<ProcessState>,
+    match_text: Option<String>,
+    exit: bool,
+    timeout_ms: Option<u64>,
+) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Wait {
+            key,
+            state,
+            match_text,
+            exit,
+            timeout_ms,
+        },
     }
 }
 
@@ -498,6 +535,25 @@ mod tests {
         .expect("request should deserialize");
         assert_eq!(decoded.request_id, 8);
         assert!(matches!(decoded.operation, IpcOperation::Launch { .. }));
+    }
+
+    #[test]
+    fn serializes_wait_condition_and_timeout() {
+        let request = request_for_wait(
+            9,
+            ProcessKey::new(
+                ProjectPath::from_canonical("/project".into()),
+                OsString::from("dev"),
+            ),
+            Some(ProcessState::Running),
+            None,
+            false,
+            Some(500),
+        );
+        assert_eq!(
+            serde_json::to_string(&request).expect("request should serialize"),
+            r#"{"version":1,"request_id":9,"operation":"wait","key":{"project_path":"/project","name":"646576"},"state":"running","match_text":null,"exit":false,"timeout_ms":500}"#
+        );
     }
 
     #[test]

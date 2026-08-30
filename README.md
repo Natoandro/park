@@ -52,6 +52,8 @@ park wait <name> (--state STATE | --match TEXT | --exit) [--timeout DURATION]
 
 `rm` refuses active records or records whose managed process group is still present, and removes logs unless `--keep-logs` is supplied. `clean` removes terminal records with no remaining managed process group across the user's Park state; it never removes active records.
 
+`wait --state` succeeds when the persisted state exactly matches the requested state. `wait --exit` matches any terminal state. `wait --match` performs a literal byte-substring search across both retained stdout and stderr, including output appended by later starts or restarts. Conditions are checked immediately and then polled; `--timeout` accepts `ms`, `s`, or `m` values, and a timeout is a generic failure (exit code `1`). A missing record remains exit code `3`.
+
 Without `--stdout` or `--stderr`, logs are combined deterministically as stdout followed by stderr. `--grep` performs a literal substring search on retained lines before `--head` or `--tail` is applied; regular expressions are not supported. With `--follow`, the initial retained output honors these filters and subsequent output is streamed as it is appended.
 
 The operation subcommands also accept long-option aliases such as `park --status dev`, while the readable subcommand form remains canonical. The `--` separator marks the start of the managed command and its arguments. Process names are opaque command-line arguments: Park does not reserve operation words or impose lexical name validation, so names such as `status` and `--status` are valid when used in the launch form, for example `park status -- ./server`.
@@ -72,6 +74,8 @@ Park is for development machines, not production service management. It delibera
 ## State and Logs
 
 Park stores process metadata in a private SQLite database at `$XDG_STATE_HOME/park/park.sqlite3`, falling back to `$HOME/.local/state/park/park.sqlite3`. Standard output and standard error remain separate append-only files under the adjacent `logs` directory. The daemon socket, lock, and PID marker are ephemeral files under `$XDG_RUNTIME_DIR/park`, with a state-directory fallback when the runtime directory is unavailable.
+
+The MVP's strongest process-ownership checks are implemented on Linux using `/proc` start times, process groups, and sessions. Other Unix targets retain the Unix interface but cannot safely verify process identity across daemon restarts yet.
 
 ## Design Documents
 

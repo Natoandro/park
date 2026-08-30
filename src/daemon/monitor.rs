@@ -105,11 +105,12 @@ async fn persist_termination(
         return;
     }
     let termination_signal = exit_signal(&status);
+    let previous = record.clone();
     if let Err(error) = record.mark_terminated(epoch_seconds(), status.code(), termination_signal) {
         eprintln!("park daemon could not record child termination for {key:?}: {error}");
         return;
     }
-    save_monitor_record(storage, key, &record).await;
+    save_monitor_record(storage, key, &previous, &record).await;
 }
 
 async fn persist_monitor_failure(
@@ -129,23 +130,26 @@ async fn persist_monitor_failure(
     if record.state().is_terminal() || record.pid() != pid {
         return;
     }
+    let previous = record.clone();
     let mut record = record;
     if let Err(error) = record.mark_monitor_failed(epoch_seconds(), reason.clone()) {
         eprintln!("park daemon monitor failure for {key:?}: {reason}; {error}");
         return;
     }
-    save_monitor_record(storage, key, &record).await;
+    save_monitor_record(storage, key, &previous, &record).await;
 }
 
 async fn save_monitor_record(
     storage: &crate::storage::Storage,
     key: &ProcessKey,
+    previous: &ProcessRecord,
     record: &ProcessRecord,
 ) {
     let mut retry_delay = Duration::from_millis(25);
     loop {
-        match storage.save_record(record) {
-            Ok(()) => return,
+        match storage.save_record_if_unchanged(previous, record) {
+            Ok(true) => return,
+            Ok(false) => return,
             Err(error) => {
                 eprintln!("park daemon could not persist monitor update for {key:?}: {error}");
             }
@@ -250,7 +254,7 @@ mod tests {
             storage.create_logs(&key).expect("logs should be created"),
         );
         record
-            .mark_running(2, 123, Some(123), None)
+            .mark_running(2, 123, Some(123), Some(123))
             .expect("record should be running");
         storage
             .create_record(&record)

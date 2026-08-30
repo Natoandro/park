@@ -10,7 +10,7 @@ use crate::process::{ProcessKey, ProcessRecord};
 use crate::result::ResultStatus;
 use crate::storage::StorageError;
 
-use super::{DaemonState, epoch_seconds, launch, record_is_alive};
+use super::{DaemonState, epoch_seconds, launch, process_identity, record_is_alive};
 
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
@@ -105,8 +105,12 @@ async fn stop_record(
         if let Some(record) = wait_for_terminal(state, request_id, record.key(), deadline).await? {
             return Ok(record);
         }
-        if let Some(group_id) = record.process_group_id() {
-            let _ = signal_group(group_id, Signal::SIGKILL);
+        if let Ok(Some(current)) = state.storage.load_record(record.key()) {
+            if process_identity::owns_group(&current) {
+                if let Some(group_id) = current.process_group_id() {
+                    let _ = signal_group(group_id, Signal::SIGKILL);
+                }
+            }
         }
     }
     let deadline = Instant::now() + STOP_TIMEOUT;
@@ -145,10 +149,18 @@ async fn signal(state: &DaemonState, request_id: u64, key: ProcessKey, name: &st
         );
     };
     if !record_is_alive(&record) {
-        return IpcResponse::error(
-            request_id,
-            ResultStatus::InvalidState,
-            "process is no longer running",
+        if let Err(response) = reconcile(state, request_id) {
+            return response;
+        }
+        return load_record(state, request_id, &key).map_or_else(
+            || missing_or_failure(state, request_id, &key),
+            |record| {
+                IpcResponse::error(
+                    request_id,
+                    ResultStatus::InvalidState,
+                    format!("cannot signal process while it is {:?}", record.state()),
+                )
+            },
         );
     }
     match signal_group(group_id, signal) {
@@ -218,7 +230,7 @@ async fn remove(
     let Some(record) = load_record(state, request_id, &key) else {
         return missing_or_failure(state, request_id, &key);
     };
-    if record.process_group_id().is_some_and(process_group_exists) {
+    if process_identity::owns_group(&record) {
         return IpcResponse::error(
             request_id,
             ResultStatus::InvalidState,
@@ -238,9 +250,7 @@ async fn clean(state: &DaemonState, request_id: u64) -> IpcResponse {
     };
     let mut removed = 0_u64;
     for record in records {
-        if !record.state().is_terminal()
-            || record.process_group_id().is_some_and(process_group_exists)
-        {
+        if !record.state().is_terminal() || process_identity::owns_group(&record) {
             continue;
         }
         let key = record.key().clone();
@@ -269,11 +279,7 @@ async fn wait_for_terminal(
         let Some(record) = record else {
             return Ok(None);
         };
-        if record.state().is_terminal()
-            && record
-                .process_group_id()
-                .is_none_or(|group_id| !process_group_exists(group_id))
-        {
+        if record.state().is_terminal() && !process_identity::owns_group(&record) {
             return Ok(Some(record));
         }
         if Instant::now() >= deadline {
@@ -301,13 +307,6 @@ fn signal_group(group_id: u32, signal: Signal) -> nix::Result<()> {
         .filter(|group_id| *group_id > 0)
         .ok_or(nix::errno::Errno::EINVAL)?;
     killpg(Pid::from_raw(group_id), signal)
-}
-
-fn process_group_exists(group_id: u32) -> bool {
-    let Ok(group_id) = i32::try_from(group_id) else {
-        return false;
-    };
-    group_id > 0 && killpg(Pid::from_raw(group_id), None).is_ok()
 }
 
 fn parse_signal(name: &str) -> Option<Signal> {

@@ -48,6 +48,8 @@ Stopping is graceful by default: send SIGTERM to the managed process group, wait
 - `--json` is a first-class output mode for process inspection and should use documented, stable fields.
 - `restart` reuses the recorded command, `start` is limited to retained terminal records, and `rm`/`clean` never remove an active process or its remaining process group.
 - Commands must be non-interactive unless explicitly requested. Stable exit semantics distinguish normal failure, missing records, duplicate records, and invalid transitions.
+- `wait --state`, `wait --exit`, and literal `wait --match` are observation operations. They poll without taking a lifecycle lock, honor an optional duration timeout, and cancel when a streaming client disconnects.
+- IPC reads and writes are bounded by deadlines so a partial request or slow reader cannot stall daemon work or child-output capture.
 
 ## Non-Goals
 
@@ -55,5 +57,9 @@ Stopping is graceful by default: send SIGTERM to the managed process group, wait
 - Restarting user processes automatically after an operating-system reboot in the initial version.
 - Requiring a manifest for routine use.
 - Becoming a container runtime, deployment system, task graph, or general workflow engine.
+
+## Platform Limit
+
+The MVP is Unix-first, but verified process ownership across daemon restarts currently requires Linux `/proc` identity data. Non-Linux Unix builds do not claim equivalent restart/reconciliation safety until platform-specific identity checks are added.
 
 An optional project configuration file can later describe repeatable named processes for `park up` and `park down`, but it must not displace the configuration-free workflow.

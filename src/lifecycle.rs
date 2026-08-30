@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -10,6 +11,25 @@ pub enum ProcessState {
     Exited,
     Failed,
     Killed,
+}
+
+impl FromStr for ProcessState {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "starting" => Ok(Self::Starting),
+            "running" => Ok(Self::Running),
+            "stopping" => Ok(Self::Stopping),
+            "exited" => Ok(Self::Exited),
+            "failed" => Ok(Self::Failed),
+            "killed" => Ok(Self::Killed),
+            _ => Err(
+                "invalid state; use starting, running, stopping, exited, failed, or killed"
+                    .to_owned(),
+            ),
+        }
+    }
 }
 
 impl ProcessState {
