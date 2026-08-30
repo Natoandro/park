@@ -48,6 +48,15 @@ park stop dev
 
 The same name can be used in separate projects. `dev` in `~/code/shop` and `dev` in `~/code/api` are independent process records.
 
+## Use Cases
+
+Park is intended for:
+
+- Keeping local development servers, workers, and watchers running after the launching terminal closes.
+- Sharing process visibility between human developers and coding agents working in the same project. A Park-managed process launched by one actor can be discovered, inspected, and controlled by the others without sharing a terminal or starting duplicate services.
+- Inspecting status and stdout/stderr later, including after a command exits, for debugging and handoff.
+- Scripted and agent-driven workflows that need stable JSON output, wait conditions, retained logs, and predictable lifecycle exit codes.
+
 ## Development
 
 Enable the repository's pre-commit version check once per checkout:
@@ -105,7 +114,9 @@ The operation subcommands also accept long-option aliases such as `park --status
 
 ## Scope
 
-Park is for development machines, not production service management. It deliberately does not replace systemd, Docker Compose, Kubernetes, or a workflow engine. Its core responsibility is narrow: named, project-scoped development commands with persistent logs and straightforward lifecycle control.
+Park is for development machines, not production service management. It deliberately does not replace systemd, Docker Compose, Kubernetes, or a workflow engine. It does not currently provide process isolation or sandboxing: managed commands run as host processes and share the host filesystem, network, and other OS resources. Use containers or a virtual machine when isolation is required. Its core responsibility is narrow: named, project-scoped development commands with persistent logs and straightforward lifecycle control.
+
+Park is conceptually related to Unix process supervisors such as [Supervisor](https://github.com/Supervisor/supervisor) and development task runners such as [Whiz](https://github.com/zifeo/whiz), but serves a different purpose. Supervisor manages configured services, while Whiz runs configured task graphs. Park is configuration-free by default and manages named, project-scoped ad-hoc commands with persistent status and logs after the launching terminal exits.
 
 ## State and Logs
 
