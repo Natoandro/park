@@ -1,0 +1,10 @@
+[book]
+title = "Park"
+authors = ["Natoandro"]
+description = "Project-scoped background process manager for local development"
+language = "en"
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/Natoandro/park"
+edit-url-template = "https://github.com/Natoandro/park/edit/master/docs/src/{path}"
