@@ -83,3 +83,5 @@ The MVP's strongest process-ownership checks are implemented on Linux using `/pr
 - [Low-level architecture](docs/low-level-architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Code review checklist](docs/review-checklist.md)
+- [End-to-end user stories](docs/e2e-user-stories.md)
+- [Docker e2e test guide](docs/e2e-docker.md)

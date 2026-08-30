@@ -260,12 +260,17 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "nix",
+ "park-e2e-macros",
  "rusqlite",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
 ]
+
+[[package]]
+name = "park-e2e-macros"
+version = "0.1.0"
 
 [[package]]
 name = "pin-project-lite"
