@@ -187,17 +187,58 @@ Phase 8 implementation decisions:
 - Linux ownership checks validate PID start time, process group, and session. Descendant-only groups are recognized by matching the recorded group/session, while a reused bare group ID is not trusted. Non-Linux Unix ownership verification remains a documented limitation.
 - IPC request reads and response writes have finite deadlines. Capture tasks remain independent of IPC clients.
 
-## Deferred Work
+## Post-MVP Roadmap
 
-- [ ] Optional project configuration and `park up` / `park down`.
-- [ ] Log rotation, retention limits, and pruning policy.
-- [ ] Evaluate SQLite-backed log indexes versus SQLite log chunks; keep raw append-only files as the recovery baseline unless ordering or search requirements justify database payloads.
-- [ ] Define an opt-in structured log envelope with body, severity, attributes, resource fields, and trace identifiers without changing raw command output.
-- [ ] Define separate event, observed, and ingested timestamps; never treat daemon capture time as the command's event time by implication.
-- [ ] Add optional compressed export to an external log backend only after specifying authentication, retry, backpressure, privacy, and local-recovery behavior.
-- [ ] Git-root project resolution as an explicit selectable policy.
-- [ ] Cross-platform process-group and IPC implementations.
-- [ ] Process restart after operating-system reboot.
+The following milestones are ordered by priority. Each feature must preserve the
+configuration-free launch form and the existing project/name identity.
+
+- [ ] **1. Automatic restart policies**
+   Add opt-in `never`, `on-failure`, and `always` policies with intentional-stop
+   suppression, bounded backoff, retry limits, persisted desired state, and clear
+   restart generations in status and logs.
+- [ ] **2. Filesystem-triggered restarts**
+   Add an optional file-watch trigger for development processes, with debounce,
+   ignored paths, restart-loop protection, and cross-platform behavior. Treat
+   watching as a restart policy rather than turning Park into a general task
+   runner.
+- [ ] **3. Agent-aware coordination**
+   Improve shared human-and-agent workflows with optional actor metadata,
+   ownership hints, collision-resistant naming helpers, and clearer safeguards
+   around processes managed by other actors. Shared visibility must remain the
+   default within a user's Park state.
+- [ ] **4. Optional project orchestration**
+   Add an opt-in project configuration and `park up` / `park down` for repeatable
+   process sets. Keep ad-hoc launches independent of configuration, and avoid
+   growing into a general DAG or workflow engine.
+- [ ] **5. Broader platform safety**
+   Add platform-specific process-group, identity, and IPC implementations so
+   lifecycle and stale-process guarantees are explicit on macOS, BSD, and later
+   Windows rather than inferred from Linux behavior.
+- [ ] **6. Reboot recovery policies**
+   Define an explicit, opt-in policy for what should happen after an operating
+   system reboot. The default should remain reconciliation without automatic
+   restart.
+- [ ] **7. Log lifecycle management**
+   Add size- and age-based rotation, retention limits, pruning, compression, and
+   explicit reporting of which historical output was removed.
+- [ ] **8. Faster and richer log queries**
+   Evaluate SQLite-backed indexes or log chunks while retaining raw append-only
+   files as the recovery baseline. Improve search and cross-stream inspection
+   without changing the lossless stdout/stderr contract.
+- [ ] **9. Structured log metadata**
+   Add opt-in structured envelopes with severity, attributes, resource fields,
+   and trace identifiers. Preserve raw command output and distinguish event,
+   observed, and ingested timestamps.
+- [ ] **10. External log export**
+   Add optional compressed export only after defining authentication, retry,
+   backpressure, privacy, retention, and local-recovery behavior.
+- [ ] **11. Selectable project resolution**
+   Consider Git-root resolution as an explicit policy, never as an implicit
+   change to invocation-directory scoping.
+
+Process isolation and sandboxing are not planned as Park core features. Park
+should continue to manage ordinary host processes; users requiring filesystem,
+network, or resource isolation should use containers or virtual machines.
 
 ## Approved Dependencies
 

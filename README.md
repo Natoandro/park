@@ -57,6 +57,29 @@ Park is intended for:
 - Inspecting status and stdout/stderr later, including after a command exits, for debugging and handoff.
 - Scripted and agent-driven workflows that need stable JSON output, wait conditions, retained logs, and predictable lifecycle exit codes.
 
+## Feature Status
+
+### Available
+
+- [x] Configuration-free launch of exact executable argument vectors.
+- [x] Canonical project-scoped process names with duplicate protection.
+- [x] On-demand per-user daemon management independent of the launching terminal.
+- [x] Dedicated process groups and conservative Linux process-ownership checks.
+- [x] Durable process records with separate, retained stdout and stderr logs.
+- [x] Status, log inspection, filtering, following, signals, graceful stop, restart, start, removal, cleanup, and wait operations.
+- [x] Stable JSON output and lifecycle exit codes for scripts and coding agents.
+
+### Planned
+
+- [ ] Automatic restart policies with backoff and retry limits.
+- [ ] Filesystem-triggered restarts for development workflows.
+- [ ] Additional coordination support for shared human-and-agent workflows.
+- [ ] Optional project configuration with `park up` and `park down`.
+- [ ] Broader platform-specific process-ownership and lifecycle guarantees.
+- [ ] Log rotation, retention, and pruning.
+
+See the [post-MVP roadmap](docs/implementation-plan.md#post-mvp-roadmap) for the complete prioritized list.
+
 ## Development
 
 Enable the repository's pre-commit version check once per checkout:
