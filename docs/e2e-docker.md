@@ -7,8 +7,15 @@ application and runner. The final runtime stage contains only the selected
 
 The `PARK-CLI-*` and `PARK-LAUNCH-*` scenarios in
 `src/bin/park-e2e/scenarios/` cover the foundation CLI and launch stories. The
-runner does not use `cargo test` or the existing
+The runner also includes the feasible standalone scenarios for the scope,
+inspection, log, lifecycle, wait, daemon, and safety groups. It does not use
+`cargo test` or the existing
 `tests/daemon_integration.rs` target.
+
+The following catalog stories remain for system or protocol-level suites rather
+than this black-box runner: `PARK-DAEMON-002`, `PARK-DAEMON-003`,
+`PARK-DAEMON-006`, `PARK-DAEMON-009`, `PARK-DAEMON-010`, `PARK-SAFETY-001`,
+`PARK-SAFETY-002`, and `PARK-SAFETY-003`.
 
 ## Files
 
