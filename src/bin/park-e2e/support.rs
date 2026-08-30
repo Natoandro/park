@@ -75,6 +75,10 @@ impl TestEnvironment {
     pub fn project_path(&self) -> &Path {
         &self.project
     }
+
+    pub fn root_path(&self) -> &Path {
+        &self.root
+    }
 }
 
 impl Drop for TestEnvironment {
@@ -84,11 +88,11 @@ impl Drop for TestEnvironment {
             .ok()
             .and_then(|value| value.trim().parse::<i32>().ok())
             .filter(|pid| *pid > 1)
-            .map(Pid::from_raw);
+            .map(|pid| Pid::from_raw(pid).as_raw());
         if let Some(pid) = pid {
-            let _ = kill(pid, Signal::SIGTERM);
+            let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
             if !wait_for_process_exit(pid) {
-                let _ = kill(pid, Signal::SIGKILL);
+                let _ = kill(Pid::from_raw(pid), Signal::SIGKILL);
                 let _ = wait_for_process_exit(pid);
             }
         }
@@ -96,9 +100,23 @@ impl Drop for TestEnvironment {
     }
 }
 
-fn wait_for_process_exit(pid: Pid) -> bool {
+pub fn wait_for_file(path: &Path) -> Result<String, String> {
+    for _ in 0..200 {
+        if let Ok(value) = fs::read_to_string(path) {
+            return Ok(value);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    Err(format!("file did not appear: {}", path.display()))
+}
+
+pub fn process_is_alive(pid: i32) -> bool {
+    pid > 1 && kill(Pid::from_raw(pid), None).is_ok()
+}
+
+pub fn wait_for_process_exit(pid: i32) -> bool {
     for _ in 0..100 {
-        if kill(pid, None).is_err() {
+        if !process_is_alive(pid) {
             return true;
         }
         thread::sleep(Duration::from_millis(10));

@@ -5,8 +5,9 @@ container. The container build stage provides Rust and Cargo to compile the
 application and runner. The final runtime stage contains only the selected
 `park` artifact, the `park-e2e` runner, and their operating-system runtime.
 
-The `PARK-CLI-*` scenarios in `src/bin/park-e2e.rs` cover the foundation CLI
-stories. The runner does not use `cargo test` or the existing
+The `PARK-CLI-*` and `PARK-LAUNCH-*` scenarios in
+`src/bin/park-e2e/scenarios/` cover the foundation CLI and launch stories. The
+runner does not use `cargo test` or the existing
 `tests/daemon_integration.rs` target.
 
 ## Files
