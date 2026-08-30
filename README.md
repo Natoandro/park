@@ -68,3 +68,4 @@ Park is for development machines, not production service management. It delibera
 - [High-level architecture](docs/architecture.md)
 - [Low-level architecture](docs/low-level-architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
+- [Code review checklist](docs/review-checklist.md)
