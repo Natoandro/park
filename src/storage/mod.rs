@@ -83,6 +83,18 @@ impl StoragePaths {
         &self.runtime_dir
     }
 
+    pub fn socket_path(&self) -> PathBuf {
+        self.runtime_dir.join("daemon.sock")
+    }
+
+    pub fn lock_path(&self) -> PathBuf {
+        self.runtime_dir.join("daemon.lock")
+    }
+
+    pub fn pid_path(&self) -> PathBuf {
+        self.runtime_dir.join("daemon.pid")
+    }
+
     pub fn ensure_directories(&self) -> Result<(), StorageError> {
         for path in [
             self.state_dir(),

@@ -84,15 +84,23 @@ Phase 3 implementation decisions:
 
 ## Phase 4: Daemon Ownership and Local IPC
 
-- [ ] Define a versioned local request/response protocol with structured success and error payloads.
-- [ ] Implement one per-user daemon endpoint and ownership lock.
-- [ ] Start the daemon on demand when the CLI cannot connect.
-- [ ] Handle concurrent first clients without starting competing daemons.
-- [ ] Detect and safely remove stale sockets and stale daemon markers.
-- [ ] Keep the daemon detached from the invoking terminal.
-- [ ] Implement IPC handlers for `ps`, `status`, and structured error responses first.
-- [ ] Keep JSON rendering in the CLI based on response data, never by parsing human text.
-- [ ] Test daemon startup, reconnection, stale runtime state, and concurrent client behavior.
+- [x] Define a versioned local request/response protocol with structured success and error payloads.
+- [x] Implement one per-user daemon endpoint and ownership lock.
+- [x] Start the daemon on demand when the CLI cannot connect.
+- [x] Handle concurrent first clients without starting competing daemons.
+- [x] Detect and safely remove stale sockets and stale daemon markers.
+- [x] Keep the daemon detached from the invoking terminal.
+- [x] Implement IPC handlers for `ps`, `status`, and structured error responses first.
+- [x] Keep JSON rendering in the CLI based on response data, never by parsing human text.
+- [x] Test daemon startup, reconnection, stale runtime state, and concurrent client behavior.
+
+Phase 4 implementation decisions:
+
+- IPC uses newline-delimited JSON over a per-user Unix socket with protocol version `1`, request IDs, and the existing structured command-result schema.
+- The daemon owns an advisory `flock` on `daemon.lock`; the kernel releases it if the daemon exits, so stale PID and socket markers never grant ownership.
+- Clients retry the socket while one daemon owner starts. The daemon is launched through the installed `park` executable, detached with `setsid`, and competing starters exit after failing the ownership lock.
+- A lock holder removes stale socket and PID marker files before binding the endpoint. It writes the current PID only after binding succeeds.
+- The first handlers are project-scoped `ps` and exact-key `status`; the CLI renders JSON directly from response data.
 
 ## Phase 5: Spawn, Capture, and Monitoring
 
