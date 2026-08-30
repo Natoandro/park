@@ -118,9 +118,9 @@ Phase 4 implementation decisions:
 Phase 5 implementation decisions:
 
 - Launch requests carry the canonical project path, opaque name, and exact OS argument vector over IPC. The daemon rejects any existing record for the complete key, including retained terminal records.
-- The daemon creates both log files and persists a `starting` record before spawning. It uses Tokio's process API directly, sets the working directory, and calls `setsid` in the child pre-exec hook to establish a dedicated process group.
+- The daemon creates both log files and persists a `starting` record before spawning. On Linux it starts a Park supervisor, sets the supervisor as the leader of a dedicated session/process group, and records the supervisor's `/proc` start time. The supervisor starts the exact target argument vector without a shell and kills its group when the daemon dies.
 - Independent Tokio capture tasks append raw stdout and stderr bytes to their respective files. The child is waited independently so output draining cannot block termination monitoring.
-- A successful spawn records the PID, process-group ID, and `running` state before returning success. Spawn errors retain the pre-created record as `failed` with the diagnostic.
+- A successful spawn records the PID, process-group ID, Linux process start time where available, and `running` state before returning success. Startup reconciliation requires the recorded Linux identity to match before treating a record as live. Spawn errors retain the pre-created record as `failed` with the diagnostic.
 - Natural exits become `exited` with an exit code; signal termination becomes `killed` with the signal number. The monitor checks for an existing terminal record before saving the terminal transition.
 
 ## Phase 6: Inspection and Logs

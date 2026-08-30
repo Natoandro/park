@@ -219,6 +219,33 @@ fn drains_large_output_without_blocking_the_child() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn daemon_crash_kills_the_managed_process_group_and_reconciles_the_record() {
+    let environment = TestEnvironment::new();
+    let target_pid_path = environment.root.join("target.pid");
+    let command = format!("echo $$ > {}; sleep 30", target_pid_path.display());
+    let launch = environment.run(&["crash", "--", "/bin/sh", "-c", &command]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    let target_pid = wait_for_pid_file(&target_pid_path);
+    let daemon_pid = environment
+        .daemon_pid()
+        .expect("daemon marker should exist before the crash");
+    kill(Pid::from_raw(daemon_pid), Signal::SIGKILL).expect("daemon should be killed");
+
+    for _ in 0..80 {
+        if kill(Pid::from_raw(target_pid), None).is_err() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        kill(Pid::from_raw(target_pid), None).is_err(),
+        "managed child should not survive its daemon"
+    );
+    assert_eq!(wait_for_state(&environment, "crash"), "exited");
+}
+
 fn wait_for_state(environment: &TestEnvironment, name: &str) -> String {
     for _ in 0..80 {
         let output = environment.run(&["status", name, "--json"]);
@@ -234,4 +261,16 @@ fn wait_for_state(environment: &TestEnvironment, name: &str) -> String {
         thread::sleep(Duration::from_millis(25));
     }
     panic!("process did not reach a terminal state");
+}
+
+fn wait_for_pid_file(path: &Path) -> i32 {
+    for _ in 0..80 {
+        if let Ok(value) = fs::read_to_string(path) {
+            if let Ok(pid) = value.trim().parse() {
+                return pid;
+            }
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    panic!("managed command did not write its PID");
 }

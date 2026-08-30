@@ -46,6 +46,8 @@ pub struct ProcessRecord {
     arguments: Vec<OsString>,
     pid: Option<u32>,
     process_group_id: Option<u32>,
+    #[serde(default)]
+    process_start_time: Option<u64>,
     created_at: EpochSeconds,
     started_at: Option<EpochSeconds>,
     exited_at: Option<EpochSeconds>,
@@ -73,6 +75,7 @@ impl ProcessRecord {
             arguments,
             pid: None,
             process_group_id: None,
+            process_start_time: None,
             created_at,
             started_at: None,
             exited_at: None,
@@ -106,6 +109,10 @@ impl ProcessRecord {
 
     pub const fn process_group_id(&self) -> Option<u32> {
         self.process_group_id
+    }
+
+    pub const fn process_start_time(&self) -> Option<u64> {
+        self.process_start_time
     }
 
     pub const fn created_at(&self) -> EpochSeconds {
@@ -150,10 +157,12 @@ impl ProcessRecord {
         started_at: EpochSeconds,
         pid: u32,
         process_group_id: Option<u32>,
+        process_start_time: Option<u64>,
     ) -> Result<(), InvalidStateTransition> {
         self.transition_to(ProcessState::Running)?;
         self.pid = Some(pid);
         self.process_group_id = process_group_id;
+        self.process_start_time = process_start_time;
         self.started_at = Some(started_at);
         Ok(())
     }

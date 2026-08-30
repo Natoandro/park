@@ -11,7 +11,9 @@ mod storage;
 
 pub use cli::{Invocation, LogsArgs, Operation, WaitArgs, parse_invocation};
 pub use client::{ClientError, request_with_daemon_start};
-pub use daemon::{DaemonError, INTERNAL_DAEMON_ARGUMENT, run as run_daemon};
+pub use daemon::{
+    DaemonError, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, run as run_daemon,
+};
 pub use ipc::{
     IpcError, IpcOperation, IpcRequest, IpcResponse, request_for_launch, request_for_ps,
     request_for_status,

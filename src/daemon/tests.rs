@@ -111,6 +111,33 @@ fn ps_and_status_return_persisted_records() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn invalid_process_identifiers_are_never_considered_live() {
+    let paths = test_paths();
+    let storage = Storage::new(paths);
+    let project = ProjectPath::from_canonical("/project".into());
+    let key = crate::process::ProcessKey::new(project.clone(), OsString::from("dev"));
+    let record = crate::process::ProcessRecord::new(
+        key,
+        project.into_path(),
+        OsString::from("server"),
+        vec![],
+        1,
+        storage.log_paths(&crate::process::ProcessKey::new(
+            ProjectPath::from_canonical("/project".into()),
+            OsString::from("dev"),
+        )),
+    );
+    let mut value = serde_json::to_value(record).expect("record should serialize");
+    value["state"] = serde_json::json!("running");
+    value["pid"] = serde_json::json!(u32::MAX);
+    value["process_group_id"] = serde_json::json!(u32::MAX);
+    value["process_start_time"] = serde_json::json!(1);
+    let record = serde_json::from_value(value).expect("record should deserialize");
+
+    assert!(!record_is_alive(&record));
+}
+
 fn test_paths() -> StoragePaths {
     StoragePaths::from_environment(&crate::storage::XdgEnvironment {
         state_home: Some("/state".into()),

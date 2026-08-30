@@ -27,7 +27,7 @@ Use versioned, newline-delimited JSON request/response messages with an operatio
 
 1. Validate the canonical key is absent; explicit replacement is deferred until lifecycle semantics are complete.
 2. Create durable record and log destinations before spawning.
-3. Spawn directly from the executable and argument vector in the recorded working directory.
+3. On Linux, spawn a Park supervisor directly from the executable and argument vector in the recorded working directory. The supervisor starts the managed command without a shell and kills its process group when the daemon dies. Other Unix platforms currently spawn the managed command directly.
 4. Create a new process group/session on supported Unix platforms.
 5. Pipe stdout and stderr to independent asynchronous writers.
 6. Mark `running` only after spawn succeeds; monitor the child and persist terminal state exactly once.
@@ -48,7 +48,7 @@ Log rotation and retention are future configuration features. Their implementati
 
 ## Failure Boundaries
 
-- Never trust a PID alone as proof that a record still owns a process; account for PID reuse where practical with process-group and start-time information.
+- On Linux, never trust a PID alone as proof that a record still owns a process. Reconciliation requires a matching `/proc` start time, process group, and session. Records without a verified identity are reconciled as no longer running.
 - Persist state changes atomically enough that a daemon crash cannot make an active process appear removable or a terminal process appear running indefinitely.
 - Treat a machine reboot as a reconciliation event, not an automatic restart request. Preserve the record and logs, then expose the process as no longer running.
 - Keep log readers and slow IPC clients from blocking child-output draining; otherwise a verbose command can deadlock on full pipes.

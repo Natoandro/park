@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
@@ -13,7 +13,7 @@ use crate::process::{ProcessKey, ProcessRecord};
 use crate::project::ProjectPath;
 use crate::result::ResultStatus;
 
-use super::{DaemonState, epoch_seconds};
+use super::{DaemonState, INTERNAL_SUPERVISOR_ARGUMENT, epoch_seconds, process_identity};
 
 pub(super) async fn start(
     state: &DaemonState,
@@ -57,7 +57,9 @@ pub(super) async fn start(
         return storage_failure(request_id, error.to_string());
     }
 
-    let mut child = match spawn_child(&working_directory, &executable, &arguments) {
+    let mut child = match validate_executable(&executable)
+        .and_then(|_| spawn_child(&working_directory, &executable, &arguments))
+    {
         Ok(child) => child,
         Err(error) => {
             return persist_start_failure(
@@ -103,7 +105,36 @@ pub(super) async fn start(
             .await;
         }
     };
-    if let Err(error) = record.mark_running(epoch_seconds(), pid, Some(pid)) {
+    #[cfg(target_os = "linux")]
+    let identity = match process_identity::read(pid) {
+        Ok(identity) => identity,
+        Err(error) => {
+            return fail_after_spawn(
+                &state.storage,
+                request_id,
+                &mut child,
+                &mut record,
+                &format!("could not establish process identity: {error}"),
+            )
+            .await;
+        }
+    };
+    #[cfg(target_os = "linux")]
+    if identity.process_group_id != pid || identity.session_id != pid {
+        return fail_after_spawn(
+            &state.storage,
+            request_id,
+            &mut child,
+            &mut record,
+            "spawned child did not establish its own session and process group",
+        )
+        .await;
+    }
+    #[cfg(target_os = "linux")]
+    let process_start_time = Some(identity.start_time);
+    #[cfg(not(target_os = "linux"))]
+    let process_start_time = None;
+    if let Err(error) = record.mark_running(epoch_seconds(), pid, Some(pid), process_start_time) {
         let _ = child.kill().await;
         return persist_start_failure(
             &state.storage,
@@ -132,14 +163,68 @@ pub(super) async fn start(
     response
 }
 
+fn validate_executable(executable: &OsString) -> io::Result<()> {
+    let path = Path::new(executable);
+    if path.components().count() > 1 {
+        return validate_executable_path(path);
+    }
+    let search_path = std::env::var_os("PATH")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "PATH is not set"))?;
+    let path = std::env::split_paths(&search_path)
+        .map(|directory| directory.join(path))
+        .find(|candidate| validate_executable_path(candidate).is_ok())
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "executable was not found in PATH")
+        })?;
+    validate_executable_path(&path)
+}
+
+fn validate_executable_path(path: &Path) -> io::Result<()> {
+    let metadata = std::fs::metadata(path)?;
+    if !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "executable is not a regular file",
+        ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        if metadata.permissions().mode() & 0o111 == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "executable lacks execute permission",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn spawn_child(
     working_directory: &PathBuf,
     executable: &OsString,
     arguments: &[OsString],
 ) -> io::Result<Child> {
-    let mut command = Command::new(executable);
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let supervisor = std::env::current_exe()?;
+        let mut command = Command::new(supervisor);
+        command
+            .arg(INTERNAL_SUPERVISOR_ARGUMENT)
+            .arg(std::process::id().to_string())
+            .arg("--")
+            .arg(executable)
+            .args(arguments);
+        command
+    };
+    #[cfg(not(target_os = "linux"))]
+    let mut command = {
+        let mut command = Command::new(executable);
+        command.args(arguments);
+        command
+    };
     command
-        .args(arguments)
         .current_dir(working_directory)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -255,7 +340,11 @@ fn exit_signal(_status: &std::process::ExitStatus) -> Option<i32> {
 }
 
 fn kill_process_group(pid: u32) -> nix::Result<()> {
-    killpg(Pid::from_raw(pid as i32), Signal::SIGKILL)
+    let pid = i32::try_from(pid)
+        .ok()
+        .filter(|pid| *pid > 0)
+        .ok_or(nix::errno::Errno::EINVAL)?;
+    killpg(Pid::from_raw(pid), Signal::SIGKILL)
 }
 
 fn storage_failure(request_id: u64, message: String) -> IpcResponse {

@@ -6,8 +6,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use nix::errno::Errno;
 use nix::fcntl::{Flock, FlockArg};
-use nix::sys::signal::kill;
-use nix::unistd::Pid;
 use thiserror::Error;
 use tokio::net::{UnixListener, UnixStream};
 
@@ -20,8 +18,10 @@ use crate::result::ResultStatus;
 use crate::storage::{Storage, StorageError, StoragePaths};
 
 mod launch;
+mod process_identity;
 
 pub const INTERNAL_DAEMON_ARGUMENT: &str = "--internal-daemon";
+pub const INTERNAL_SUPERVISOR_ARGUMENT: &str = "--internal-supervisor";
 
 #[derive(Debug)]
 pub struct DaemonLock {
@@ -221,14 +221,7 @@ fn storage_error(request_id: u64, error: StorageError) -> IpcResponse {
 }
 
 fn record_is_alive(record: &ProcessRecord) -> bool {
-    let Some(pid) = record.pid() else {
-        return false;
-    };
-    match kill(Pid::from_raw(pid as i32), None) {
-        Ok(()) => true,
-        Err(Errno::EPERM) => true,
-        Err(_) => false,
-    }
+    process_identity::matches_record(record)
 }
 
 fn epoch_seconds() -> u64 {
