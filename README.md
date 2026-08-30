@@ -65,6 +65,10 @@ The operation subcommands also accept long-option aliases such as `park --status
 
 Park is for development machines, not production service management. It deliberately does not replace systemd, Docker Compose, Kubernetes, or a workflow engine. Its core responsibility is narrow: named, project-scoped development commands with persistent logs and straightforward lifecycle control.
 
+## State and Logs
+
+Park stores process metadata in a private SQLite database at `$XDG_STATE_HOME/park/park.sqlite3`, falling back to `$HOME/.local/state/park/park.sqlite3`. Standard output and standard error remain separate append-only files under the adjacent `logs` directory. The daemon socket, lock, and PID marker are ephemeral files under `$XDG_RUNTIME_DIR/park`, with a state-directory fallback when the runtime directory is unavailable.
+
 ## Design Documents
 
 - [High-level architecture](docs/architecture.md)

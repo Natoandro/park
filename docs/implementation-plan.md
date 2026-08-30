@@ -9,7 +9,7 @@ Phase 0 establishes the platform, toolchain, and dependency policy before implem
 - [x] Confirm the initial supported platform: Unix-only MVP.
 - [x] Confirm the Rust toolchain policy: Edition 2024 and MSRV 1.85.
 - [x] Approve the async/process strategy: Tokio.
-- [x] Approve the persistence strategy: atomically replaced JSON metadata.
+- [x] Approve the persistence strategy: SQLite process metadata with append-only log files.
 - [x] Approve Unix process-group, signal, and advisory-lock support through `nix`.
 - [x] Record each approved crate, version policy, purpose, and rejected alternative in this document.
 
@@ -18,10 +18,11 @@ Recorded decisions:
 - Initial platform: Unix-only MVP; Windows support is deferred.
 - Toolchain: Edition 2024 with MSRV 1.85.
 - Async runtime and local IPC: `tokio`; synchronous threads and standard-library sockets were rejected for the MVP.
-- Durable metadata: atomically replaced JSON backed by `serde_json`; `rusqlite` was rejected for the MVP.
+- Durable metadata: SQLite backed by `rusqlite`; process output remains in separate append-only files.
 - Unix process groups, signals, and advisory locking: `nix`; internal FFI and a separate `fs2` dependency were rejected.
 - Errors: `thiserror`; `anyhow` and fully internal error types were rejected in favor of typed stable outcomes.
 - Time: epoch timestamps with internal formatting; `time` and `chrono` were rejected for the MVP.
+- SQLite: bundled `rusqlite`; system SQLite linking was rejected to avoid an installation-time system dependency.
 
 ## Phase 1: Workspace and Public Contract
 
@@ -67,19 +68,19 @@ Phase 2 implementation decisions:
 - [x] Resolve durable state under `XDG_STATE_HOME` or its XDG fallback.
 - [x] Resolve the IPC directory under `XDG_RUNTIME_DIR`, with a documented safe fallback when it is unavailable.
 - [x] Define stable on-disk directory and file naming that does not expose raw project paths as unsafe filenames.
-- [x] Implement atomic record writes and crash-safe replacement semantics.
+- [x] Implement SQLite record writes and crash-safe transaction semantics.
 - [x] Create separate stdout and stderr files before spawning a process.
 - [x] Persist process creation before reporting successful parking.
 - [x] Retain terminal records and logs until `rm` or `clean` acts on them.
 - [x] Implement startup reconciliation for records that claim to be active but whose process is gone.
-- [x] Test interrupted writes, stale records, absent XDG variables, and process-name/path encoding.
+- [x] Test SQLite recovery behavior, stale records, absent XDG variables, and process-name/path encoding.
 
 Phase 3 implementation decisions:
 
 - Durable state uses `$XDG_STATE_HOME/park`, falling back to `$HOME/.local/state/park`. Runtime state uses `$XDG_RUNTIME_DIR/park`, falling back to a private `runtime/park` directory under the durable state directory.
-- Records and logs are stored under separate `records` and `logs` directories. Filenames use a deterministic digest of the canonical project path and opaque name rather than exposing either value as a path component.
-- New records use an atomically linked completed temporary file; updates use a synced temporary file followed by atomic replacement. The records directory is synced after link/rename, and exclusive temporary creation retries collision-resistant names so stale files from a prior process do not block updates. Temporary files are ignored during record discovery.
-- Every record load validates lifecycle fields, working-directory/key consistency, the expected record filename, and derived log paths before it is listed, reconciled, or removed.
+- Process metadata is stored in `$XDG_STATE_HOME/park/park.sqlite3` (or the documented fallback), while logs remain under its `logs` directory. SQLite identity columns use lossless Unix BLOB values for canonical project paths and opaque names.
+- SQLite creates a unique `(project_path, name)` index and stores the serialized process record alongside those identity columns. SQLite's journal provides atomic record updates; the database is private to the user.
+- Every record load validates lifecycle fields, working-directory/key consistency, SQLite identity columns, and derived log paths before it is listed, reconciled, or removed.
 - Log files are created independently with exclusive creation before a record is persisted. Terminal records and logs remain until explicit removal.
 - Reconciliation accepts an injected liveness check so platform-specific PID and process-group ownership checks can be added with the daemon in later phases.
 
@@ -184,11 +185,11 @@ Approved for the MVP. Use the latest release compatible with the MSRV unless a p
 
 - [x] `clap`: conventional CLI argument parsing and subcommand boundaries.
 - [x] `serde`: conventional structured data serialization for persisted records and IPC payloads.
-- [x] `serde_json`: conventional JSON persistence and first-class JSON CLI output.
+- [x] `serde_json`: structured IPC and first-class JSON CLI output.
 - [x] `tokio`: asynchronous local IPC, child-process monitoring, timers, and independent output draining.
 - [x] `nix`: Unix process groups, signals, and kernel-managed advisory daemon locking.
 - [x] `thiserror`: typed internal errors with stable machine-readable classification and exit-code mapping.
-- [ ] `rusqlite`: rejected for the MVP; SQLite persistence may be reconsidered if registry querying or history requires it.
+- [x] `rusqlite`: SQLite process metadata and transactional lifecycle persistence; the bundled feature avoids a system SQLite dependency. A JSON-file registry was rejected because concurrent lifecycle mutations and registry queries are core MVP behavior.
 - [ ] `fs2`: rejected for the MVP; advisory locking is provided through `nix`.
 - [ ] `anyhow`: rejected for the MVP; typed errors are required at public command boundaries.
 - [ ] `time` / `chrono`: rejected for the MVP; timestamps are persisted as epochs with internal formatting.

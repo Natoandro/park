@@ -28,7 +28,7 @@ The daemon is started transparently on first use and owns the complete lifecycle
 
 ### Registry and Storage
 
-The registry persists process records and points to separate stdout and stderr logs. State follows XDG conventions: durable records and logs belong in the user state directory; the IPC socket and other ephemeral runtime coordination belong in `$XDG_RUNTIME_DIR` when available. Exited records remain inspectable until explicitly removed or cleaned.
+The registry persists process records in a private SQLite database and points to separate append-only stdout and stderr logs. State follows XDG conventions: the database and logs belong in the user state directory; the IPC socket and other ephemeral runtime coordination belong in `$XDG_RUNTIME_DIR` when available. Exited records remain inspectable until explicitly removed or cleaned.
 
 ## Process Lifecycle
 

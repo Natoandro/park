@@ -233,11 +233,11 @@ fn stale_logs_without_a_record_do_not_block_a_later_launch() {
     let first = environment.run(&["stale", "--", "/bin/true"]);
     assert!(first.status.success(), "stderr: {:?}", first.stderr);
     assert_eq!(wait_for_state(&environment, "stale"), "exited");
-    let records_dir = environment.root.join("state/park/records");
-    for entry in fs::read_dir(records_dir).expect("records directory should be readable") {
-        let path = entry.expect("record entry should be readable").path();
-        fs::remove_file(path).expect("retained record should be removable for this test");
-    }
+    let database = environment.root.join("state/park/park.sqlite3");
+    let connection = rusqlite::Connection::open(&database).expect("database should open");
+    connection
+        .execute("DELETE FROM process_records", [])
+        .expect("record should be removable for this test");
 
     let second = environment.run(&["stale", "--", "/bin/true"]);
     assert!(second.status.success(), "stderr: {:?}", second.stderr);

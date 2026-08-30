@@ -103,16 +103,14 @@ fn resolves_explicit_xdg_paths_and_safe_fallbacks() {
 fn creates_separate_logs_and_safe_encoded_paths() {
     let (_root, storage, project) = test_storage();
     let record = record(&storage, &project, OsString::from("../../service"));
-    let record_path = storage.record_path(record.key());
     let logs = storage.log_paths(record.key());
 
-    assert!(record_path.starts_with(storage.paths().records_dir()));
+    assert!(storage.paths().database_path().exists());
     assert!(
-        !record_path
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .contains("service")
+        storage
+            .paths()
+            .database_path()
+            .starts_with(storage.paths().state_dir())
     );
     assert_ne!(logs.stdout, logs.stderr);
     assert!(logs.stdout.exists());
@@ -179,10 +177,6 @@ fn atomically_persists_and_replaces_records() {
         ProcessState::Running
     );
 
-    let interrupted = storage
-        .record_path(record.key())
-        .with_file_name(".interrupted-record.json.tmp");
-    fs::write(&interrupted, b"partial").expect("interrupted temp file should be created");
     assert_eq!(
         storage.list_records().expect("records should list").len(),
         1
@@ -214,7 +208,12 @@ fn retains_logs_and_rejects_removal_of_active_records() {
     storage
         .remove_record(record.key(), true)
         .expect("terminal record should be removable");
-    assert!(!storage.record_path(record.key()).exists());
+    assert!(
+        storage
+            .load_record(record.key())
+            .expect("record lookup should succeed")
+            .is_none()
+    );
     assert!(logs.stdout.exists());
     assert!(logs.stderr.exists());
 }
@@ -258,16 +257,20 @@ fn rejects_a_record_with_external_log_paths_before_removal() {
     let external_log = root.path().join("outside.log");
     fs::write(&external_log, b"must remain").expect("external log should exist");
 
-    let path = storage.record_path(record.key());
+    let path = storage.paths().database_path();
     let mut value: serde_json::Value =
-        serde_json::from_slice(&fs::read(&path).expect("record should be readable"))
-            .expect("record should be JSON");
+        serde_json::to_value(&record).expect("record should serialize");
     value["logs"]["stdout"] = serde_json::json!(external_log);
-    fs::write(
-        &path,
-        serde_json::to_vec(&value).expect("record should serialize"),
-    )
-    .expect("corrupt record should write");
+    let connection = rusqlite::Connection::open(path).expect("database should open");
+    connection
+        .execute(
+            "UPDATE process_records SET record_json = ?1 WHERE key_digest = ?2",
+            rusqlite::params![
+                serde_json::to_vec(&value).expect("record should serialize"),
+                files::key_digest(record.key()),
+            ],
+        )
+        .expect("record should be corrupted");
 
     assert!(matches!(
         storage.remove_record(record.key(), false),
@@ -280,15 +283,20 @@ fn rejects_a_record_with_external_log_paths_before_removal() {
 }
 
 #[test]
-fn rejects_a_record_stored_under_an_unrelated_filename() {
+fn rejects_a_record_with_mismatched_identity_columns() {
     let (_root, storage, project) = test_storage();
     let record = record(&storage, &project, OsString::from("dev"));
     storage
         .create_record(&record)
         .expect("record should be created");
-    let path = storage.record_path(record.key());
-    let unrelated = path.with_file_name("unrelated.json");
-    fs::rename(&path, &unrelated).expect("record should be renamed");
+    let connection =
+        rusqlite::Connection::open(storage.paths().database_path()).expect("database should open");
+    connection
+        .execute(
+            "UPDATE process_records SET name = ?1 WHERE key_digest = ?2",
+            rusqlite::params![b"different".as_slice(), files::key_digest(record.key())],
+        )
+        .expect("record identity should be corrupted");
 
     assert!(matches!(
         storage.list_records(),

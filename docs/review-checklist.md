@@ -52,9 +52,9 @@ Use this checklist for recurring reviews of Park changes. Reviewers should focus
 ## Persistence And Filesystem Safety
 
 - [ ] Every loaded record is validated before listing, reconciliation, lifecycle actions, or removal.
-- [ ] Record key, record filename, working directory, lifecycle fields, timestamps, and log paths agree.
+- [ ] Record key, SQLite identity columns, working directory, lifecycle fields, timestamps, and log paths agree.
 - [ ] Removal deletes only key-derived logs after validating a terminal record.
-- [ ] Record creation and replacement use exclusive temporary files, atomic publication, file sync, and parent-directory sync.
+- [ ] SQLite record creation and replacement use transactional updates with an appropriate journal mode.
 - [ ] Stale temporary files and stale log-only artifacts have a safe recovery path.
 - [ ] Concurrent record mutations cannot allow stale state to replace a later terminal transition.
 - [ ] XDG state and runtime paths are used without hard-coded home-directory paths.

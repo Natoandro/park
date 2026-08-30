@@ -3,6 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Error as JsonError;
 use thiserror::Error;
 
@@ -31,9 +32,9 @@ impl XdgEnvironment {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoragePaths {
     state_dir: PathBuf,
-    records_dir: PathBuf,
     logs_dir: PathBuf,
     runtime_dir: PathBuf,
+    database_path: PathBuf,
 }
 
 impl StoragePaths {
@@ -56,9 +57,9 @@ impl StoragePaths {
             .unwrap_or_else(|| state_dir.join("runtime"));
 
         Ok(Self {
-            records_dir: state_dir.join("records"),
             logs_dir: state_dir.join("logs"),
             runtime_dir: runtime_base.join("park"),
+            database_path: state_dir.join("park.sqlite3"),
             state_dir,
         })
     }
@@ -69,10 +70,6 @@ impl StoragePaths {
 
     pub fn state_dir(&self) -> &Path {
         &self.state_dir
-    }
-
-    pub fn records_dir(&self) -> &Path {
-        &self.records_dir
     }
 
     pub fn logs_dir(&self) -> &Path {
@@ -95,13 +92,12 @@ impl StoragePaths {
         self.runtime_dir.join("daemon.pid")
     }
 
+    pub fn database_path(&self) -> &Path {
+        &self.database_path
+    }
+
     pub fn ensure_directories(&self) -> Result<(), StorageError> {
-        for path in [
-            self.state_dir(),
-            self.records_dir(),
-            self.logs_dir(),
-            self.runtime_dir(),
-        ] {
+        for path in [self.state_dir(), self.logs_dir(), self.runtime_dir()] {
             fs::create_dir_all(path).map_err(|source| StorageError::Io {
                 operation: "create directory",
                 path: path.to_path_buf(),
@@ -109,6 +105,27 @@ impl StoragePaths {
             })?;
             files::set_private_permissions(path)?;
         }
+        let connection =
+            Connection::open(&self.database_path).map_err(|source| StorageError::Sqlite {
+                operation: "open SQLite database",
+                source,
+            })?;
+        connection
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS process_records (
+                    key_digest TEXT PRIMARY KEY NOT NULL,
+                    project_path BLOB NOT NULL,
+                    name BLOB NOT NULL,
+                    record_json BLOB NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS process_records_identity
+                    ON process_records(project_path, name);",
+            )
+            .map_err(|source| StorageError::Sqlite {
+                operation: "initialize SQLite schema",
+                source,
+            })?;
+        files::set_private_file_permissions(&self.database_path)?;
         Ok(())
     }
 }
@@ -125,10 +142,6 @@ impl Storage {
 
     pub fn paths(&self) -> &StoragePaths {
         &self.paths
-    }
-
-    pub fn record_path(&self, key: &ProcessKey) -> PathBuf {
-        self.paths.records_dir().join(files::key_record_name(key))
     }
 
     pub fn log_paths(&self, key: &ProcessKey) -> LogPaths {
@@ -159,92 +172,204 @@ impl Storage {
 
     pub fn create_record(&self, record: &ProcessRecord) -> Result<(), StorageError> {
         self.paths.ensure_directories()?;
-        let path = self.record_path(record.key());
-        self.validate_record(record, &path)?;
-        if path.exists() {
-            return Err(StorageError::RecordExists { path });
-        }
+        let path = self.paths.database_path().to_path_buf();
+        self.validate_record(record)?;
         let payload = serde_json::to_vec_pretty(record)?;
-        files::atomic_create(&path, &payload)
+        let connection = self.open_connection()?;
+        connection
+            .execute(
+                "INSERT INTO process_records
+                    (key_digest, project_path, name, record_json)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    files::key_digest(record.key()),
+                    project_bytes(record.key()),
+                    name_bytes(record.key()),
+                    payload,
+                ],
+            )
+            .map(|_| ())
+            .map_err(|source| match source {
+                rusqlite::Error::SqliteFailure(error, _)
+                    if error.code == rusqlite::ErrorCode::ConstraintViolation =>
+                {
+                    StorageError::RecordExists { path }
+                }
+                source => StorageError::Sqlite {
+                    operation: "create SQLite process record",
+                    source,
+                },
+            })
     }
 
     pub fn save_record(&self, record: &ProcessRecord) -> Result<(), StorageError> {
         self.paths.ensure_directories()?;
-        let path = self.record_path(record.key());
-        self.validate_record(record, &path)?;
-        if !path.exists() {
+        let path = self.paths.database_path().to_path_buf();
+        self.validate_record(record)?;
+        let payload = serde_json::to_vec_pretty(record)?;
+        let connection = self.open_connection()?;
+        let changed = connection
+            .execute(
+                "UPDATE process_records SET record_json = ?1
+                 WHERE key_digest = ?2",
+                params![payload, files::key_digest(record.key())],
+            )
+            .map_err(|source| StorageError::Sqlite {
+                operation: "save SQLite process record",
+                source,
+            })?;
+        if changed == 0 {
             return Err(StorageError::RecordMissing { path });
         }
-        let payload = serde_json::to_vec_pretty(record)?;
-        files::atomic_replace(&path, &payload)
+        Ok(())
     }
 
     pub fn load_record(&self, key: &ProcessKey) -> Result<Option<ProcessRecord>, StorageError> {
-        let path = self.record_path(key);
-        if !path.exists() {
-            return Ok(None);
-        }
-        let record = files::read_record(&path)?;
-        self.validate_record(&record, &path)?;
-        Ok(Some(record))
+        let connection = self.open_connection()?;
+        let row = connection
+            .query_row(
+                "SELECT project_path, name, record_json
+                 FROM process_records WHERE key_digest = ?1",
+                params![files::key_digest(key)],
+                |row| {
+                    Ok((
+                        row.get::<_, Vec<u8>>(0)?,
+                        row.get::<_, Vec<u8>>(1)?,
+                        row.get::<_, Vec<u8>>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|source| StorageError::Sqlite {
+                operation: "load SQLite process record",
+                source,
+            })?;
+        row.map(|(project_path, name, payload)| {
+            self.decode_record(key, &project_path, &name, &payload)
+        })
+        .transpose()
     }
 
     pub fn list_records(&self) -> Result<Vec<ProcessRecord>, StorageError> {
-        let entries = match fs::read_dir(self.paths.records_dir()) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(source) => {
-                return Err(StorageError::Io {
-                    operation: "read records directory",
-                    path: self.paths.records_dir().to_path_buf(),
-                    source,
-                });
-            }
-        };
-        files::read_records(entries)?
-            .into_iter()
-            .map(|(path, record)| {
-                self.validate_record(&record, &path)?;
-                Ok(record)
+        let connection = self.open_connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT project_path, name, record_json
+                 FROM process_records ORDER BY project_path, name",
+            )
+            .map_err(|source| StorageError::Sqlite {
+                operation: "query SQLite process records",
+                source,
+            })?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, Vec<u8>>(0)?,
+                    row.get::<_, Vec<u8>>(1)?,
+                    row.get::<_, Vec<u8>>(2)?,
+                ))
             })
-            .collect()
+            .map_err(|source| StorageError::Sqlite {
+                operation: "read SQLite process records",
+                source,
+            })?;
+        rows.map(|row| {
+            let (project_path, name, payload) = row.map_err(|source| StorageError::Sqlite {
+                operation: "read SQLite process record row",
+                source,
+            })?;
+            let record =
+                serde_json::from_slice(&payload).map_err(|source| StorageError::InvalidRecord {
+                    path: self.paths.database_path().to_path_buf(),
+                    source,
+                })?;
+            self.validate_record_columns(&record, &project_path, &name)?;
+            self.validate_record(&record)?;
+            Ok(record)
+        })
+        .collect()
     }
 
-    fn validate_record(&self, record: &ProcessRecord, path: &Path) -> Result<(), StorageError> {
+    fn validate_record(&self, record: &ProcessRecord) -> Result<(), StorageError> {
         record
             .validate()
             .map_err(|source| StorageError::InvalidRecordInvariant {
-                path: path.to_path_buf(),
+                path: self.paths.database_path().to_path_buf(),
                 source,
             })?;
-        if path != self.record_path(record.key()) {
-            return Err(StorageError::InvalidRecordInvariant {
-                path: path.to_path_buf(),
-                source: ProcessRecordValidationError::RecordPath,
-            });
-        }
         if record.logs() != &self.log_paths(record.key()) {
             return Err(StorageError::InvalidRecordInvariant {
-                path: path.to_path_buf(),
+                path: self.paths.database_path().to_path_buf(),
                 source: ProcessRecordValidationError::LogPaths,
             });
         }
         Ok(())
     }
 
+    fn validate_record_columns(
+        &self,
+        record: &ProcessRecord,
+        project_path: &[u8],
+        name: &[u8],
+    ) -> Result<(), StorageError> {
+        if project_path != project_bytes(record.key()) || name != name_bytes(record.key()) {
+            return Err(StorageError::InvalidRecordInvariant {
+                path: self.paths.database_path().to_path_buf(),
+                source: ProcessRecordValidationError::RecordPath,
+            });
+        }
+        Ok(())
+    }
+
+    fn decode_record(
+        &self,
+        key: &ProcessKey,
+        project_path: &[u8],
+        name: &[u8],
+        payload: &[u8],
+    ) -> Result<ProcessRecord, StorageError> {
+        let record: ProcessRecord =
+            serde_json::from_slice(payload).map_err(|source| StorageError::InvalidRecord {
+                path: self.paths.database_path().to_path_buf(),
+                source,
+            })?;
+        if record.key() != key {
+            return Err(StorageError::InvalidRecordInvariant {
+                path: self.paths.database_path().to_path_buf(),
+                source: ProcessRecordValidationError::RecordPath,
+            });
+        }
+        self.validate_record_columns(&record, project_path, name)?;
+        self.validate_record(&record)?;
+        Ok(record)
+    }
+
+    fn open_connection(&self) -> Result<Connection, StorageError> {
+        self.paths.ensure_directories()?;
+        Connection::open(self.paths.database_path()).map_err(|source| StorageError::Sqlite {
+            operation: "open SQLite database",
+            source,
+        })
+    }
+
     pub fn remove_record(&self, key: &ProcessKey, keep_logs: bool) -> Result<(), StorageError> {
-        let path = self.record_path(key);
+        let path = self.paths.database_path().to_path_buf();
         let record = self
             .load_record(key)?
             .ok_or_else(|| StorageError::RecordMissing { path: path.clone() })?;
         if !record.state().is_terminal() {
             return Err(StorageError::ActiveRecord { path });
         }
-        fs::remove_file(&path).map_err(|source| StorageError::Io {
-            operation: "remove record",
-            path: path.clone(),
-            source,
-        })?;
+        let connection = self.open_connection()?;
+        connection
+            .execute(
+                "DELETE FROM process_records WHERE key_digest = ?1",
+                params![files::key_digest(key)],
+            )
+            .map_err(|source| StorageError::Sqlite {
+                operation: "remove SQLite process record",
+                source,
+            })?;
         if !keep_logs {
             files::remove_if_present(&record.logs().stdout)?;
             files::remove_if_present(&record.logs().stderr)?;
@@ -283,6 +408,18 @@ impl Storage {
     }
 }
 
+#[cfg(unix)]
+fn project_bytes(key: &ProcessKey) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+    key.project_path().as_os_str().as_bytes().to_vec()
+}
+
+#[cfg(unix)]
+fn name_bytes(key: &ProcessKey) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+    key.name().as_bytes().to_vec()
+}
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("HOME is required when XDG_STATE_HOME is not set")]
@@ -302,6 +439,11 @@ pub enum StorageError {
     },
     #[error("could not serialize record: {0}")]
     Json(#[from] JsonError),
+    #[error("could not {operation}: {source}")]
+    Sqlite {
+        operation: &'static str,
+        source: rusqlite::Error,
+    },
     #[error("could not reconcile record state: {0}")]
     StateTransition(#[from] InvalidStateTransition),
     #[error("could not {operation} {path:?}: {source}")]
