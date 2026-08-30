@@ -138,6 +138,40 @@ fn invalid_process_identifiers_are_never_considered_live() {
     assert!(!record_is_alive(&record));
 }
 
+#[cfg(unix)]
+#[test]
+fn canonicalizes_daemon_project_paths_before_dispatch() {
+    use std::os::unix::fs::symlink;
+
+    let root = std::env::temp_dir().join(format!("park-daemon-project-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir(&root).expect("test root should be created");
+    let project = root.join("project");
+    let alias = root.join("project-alias");
+    fs::create_dir(&project).expect("project should be created");
+    symlink(&project, &alias).expect("project alias should be created");
+
+    let operation = canonicalize_operation(IpcOperation::Ps {
+        project_path: ProjectPath::from_canonical(alias),
+    })
+    .expect("alias should resolve");
+    assert!(matches!(
+        operation,
+        IpcOperation::Ps { project_path } if project_path.as_path() == fs::canonicalize(&project).expect("project should canonicalize")
+    ));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rejects_invalid_daemon_project_paths() {
+    assert!(
+        canonicalize_operation(IpcOperation::Ps {
+            project_path: ProjectPath::from_canonical("relative-project".into()),
+        })
+        .is_err()
+    );
+}
+
 fn test_paths() -> StoragePaths {
     StoragePaths::from_environment(&crate::storage::XdgEnvironment {
         state_home: Some("/state".into()),

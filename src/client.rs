@@ -26,15 +26,26 @@ pub async fn request_with_daemon_start(
             Err(error) => error,
         };
 
-        if !started {
+        if !started && should_start_daemon(&last_error) {
             spawn_daemon()?;
             started = true;
+        }
+        if !started || !should_start_daemon(&last_error) {
+            return Err(last_error.into());
         }
         if Instant::now() >= deadline {
             return Err(ClientError::StartupTimeout { source: last_error });
         }
         sleep(RETRY_INTERVAL).await;
     }
+}
+
+fn should_start_daemon(error: &IpcError) -> bool {
+    matches!(
+        error,
+        IpcError::Io { source, .. }
+            if matches!(source.kind(), io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused)
+    )
 }
 
 fn spawn_daemon() -> Result<(), ClientError> {
@@ -81,4 +92,32 @@ pub enum ClientError {
     },
     #[error("daemon did not become ready: {source}")]
     StartupTimeout { source: IpcError },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn connection_error(kind: io::ErrorKind) -> IpcError {
+        IpcError::Io {
+            operation: "connect to daemon",
+            source: io::Error::from(kind),
+        }
+    }
+
+    #[test]
+    fn starts_only_for_missing_or_refused_daemon_sockets() {
+        assert!(should_start_daemon(&connection_error(
+            io::ErrorKind::NotFound
+        )));
+        assert!(should_start_daemon(&connection_error(
+            io::ErrorKind::ConnectionRefused
+        )));
+        assert!(!should_start_daemon(&connection_error(
+            io::ErrorKind::PermissionDenied
+        )));
+        assert!(!should_start_daemon(&IpcError::Protocol(
+            "bad response".to_owned()
+        )));
+    }
 }

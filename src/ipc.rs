@@ -89,13 +89,30 @@ pub async fn send_request(
         source,
     })?;
 
-    read_message(
+    let response: IpcResponse = read_message(
         stream,
         "read daemon response",
         "daemon closed the connection",
         "daemon response is too large",
     )
-    .await
+    .await?;
+    validate_response(request, response)
+}
+
+fn validate_response(request: &IpcRequest, response: IpcResponse) -> Result<IpcResponse, IpcError> {
+    if response.version != PROTOCOL_VERSION {
+        return Err(IpcError::Protocol(format!(
+            "unsupported daemon protocol version {}",
+            response.version
+        )));
+    }
+    if response.request_id != request.request_id {
+        return Err(IpcError::Protocol(format!(
+            "daemon response request ID {} does not match request ID {}",
+            response.request_id, request.request_id
+        )));
+    }
+    Ok(response)
 }
 
 pub async fn read_request(stream: &mut tokio::net::UnixStream) -> Result<IpcRequest, IpcError> {
@@ -370,5 +387,22 @@ mod tests {
             .expect_err("unterminated message should fail");
             assert!(matches!(error, IpcError::Protocol(message) if message == "IPC message must end with a newline"));
         });
+    }
+
+    #[test]
+    fn rejects_response_with_a_mismatched_version_or_request_id() {
+        let request = request_for_ps(7, ProjectPath::from_canonical("/project".into()));
+        let mut response = IpcResponse::success(7, None);
+        response.version = PROTOCOL_VERSION + 1;
+        assert!(matches!(
+            validate_response(&request, response),
+            Err(IpcError::Protocol(message)) if message.contains("protocol version")
+        ));
+
+        let response = IpcResponse::success(8, None);
+        assert!(matches!(
+            validate_response(&request, response),
+            Err(IpcError::Protocol(message)) if message.contains("request ID")
+        ));
     }
 }

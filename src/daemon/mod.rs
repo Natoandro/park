@@ -14,6 +14,7 @@ use crate::ipc::{
     write_response,
 };
 use crate::process::{ProcessKey, ProcessRecord};
+use crate::project::resolve_project;
 use crate::result::ResultStatus;
 use crate::storage::{Storage, StorageError, StoragePaths};
 
@@ -172,7 +173,13 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> IpcRespon
     }
 
     let request_id = request.request_id;
-    match request.operation {
+    let operation = match canonicalize_operation(request.operation) {
+        Ok(operation) => operation,
+        Err(error) => {
+            return IpcResponse::error(request_id, ResultStatus::Failure, error.to_string());
+        }
+    };
+    match operation {
         IpcOperation::Launch {
             project_path,
             name,
@@ -186,6 +193,32 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> IpcRespon
                 operation,
             },
         ),
+    }
+}
+
+fn canonicalize_operation(
+    operation: IpcOperation,
+) -> Result<IpcOperation, crate::ProjectResolutionError> {
+    match operation {
+        IpcOperation::Launch {
+            project_path,
+            name,
+            command,
+        } => Ok(IpcOperation::Launch {
+            project_path: resolve_project(project_path.as_path())?,
+            name,
+            command,
+        }),
+        IpcOperation::Ps { project_path } => Ok(IpcOperation::Ps {
+            project_path: resolve_project(project_path.as_path())?,
+        }),
+        IpcOperation::Status { key } => Ok(IpcOperation::Status {
+            key: ProcessKey::new(
+                resolve_project(key.project_path())?,
+                key.name().to_os_string(),
+            ),
+        }),
+        IpcOperation::Ping => Ok(IpcOperation::Ping),
     }
 }
 

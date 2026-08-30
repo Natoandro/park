@@ -102,6 +102,7 @@ Phase 4 implementation decisions:
 - Clients retry the socket while one daemon owner starts. The daemon is launched through the installed `park` executable, detached with `setsid`, and competing starters exit after failing the ownership lock.
 - A lock holder removes stale socket and PID marker files before binding the endpoint. It writes the current PID only after binding succeeds.
 - The first handlers are project-scoped `ps` and exact-key `status`; the CLI renders JSON directly from response data.
+- The daemon canonicalizes every project path received through IPC before dispatching a launch, list, or status operation. The client rejects a response whose version or request ID does not match its request and starts a daemon only after missing/refused-socket errors.
 
 ## Phase 5: Spawn, Capture, and Monitoring
 
