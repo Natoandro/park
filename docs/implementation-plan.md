@@ -175,6 +175,10 @@ Phase 6 implementation decisions:
 
 - [ ] Optional project configuration and `park up` / `park down`.
 - [ ] Log rotation, retention limits, and pruning policy.
+- [ ] Evaluate SQLite-backed log indexes versus SQLite log chunks; keep raw append-only files as the recovery baseline unless ordering or search requirements justify database payloads.
+- [ ] Define an opt-in structured log envelope with body, severity, attributes, resource fields, and trace identifiers without changing raw command output.
+- [ ] Define separate event, observed, and ingested timestamps; never treat daemon capture time as the command's event time by implication.
+- [ ] Add optional compressed export to an external log backend only after specifying authentication, retry, backpressure, privacy, and local-recovery behavior.
 - [ ] Git-root project resolution as an explicit selectable policy.
 - [ ] Cross-platform process-group and IPC implementations.
 - [ ] Process restart after operating-system reboot.
