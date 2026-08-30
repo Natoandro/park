@@ -1,6 +1,7 @@
 mod cli;
 mod client;
 mod daemon;
+mod help;
 mod ipc;
 mod lifecycle;
 mod process;
@@ -14,6 +15,7 @@ pub use client::{ClientError, request_with_daemon_start, stream_request_with_dae
 pub use daemon::{
     DaemonError, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, run as run_daemon,
 };
+pub use help::skills_help_result;
 pub use ipc::{
     IpcError, IpcLogOptions, IpcOperation, IpcRequest, IpcResponse, request_for_clean,
     request_for_launch, request_for_logs, request_for_ps, request_for_remove, request_for_restart,

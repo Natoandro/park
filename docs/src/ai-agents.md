@@ -62,7 +62,23 @@ semantics. See [Quick Start](quick-start.md) for the complete command workflow.
 
 ## Discovery
 
-The installed skill is the detailed behavioral guide. Park's normal CLI help and
-the documentation remain the source of truth for the commands supported by the
+The installed binary provides a version-matched summary of the integration:
+
+```bash
+park help --skills
+```
+
+Use `--json` when an agent needs to discover the guide programmatically:
+
+```bash
+park help --skills --json
+```
+
+The JSON result uses Park's standard result envelope. Its `data` includes the
+skill `name` and `source`, project/global/one-off commands under `install`, the
+recommended `workflow`, skill `maintenance` commands, and Park `exit_codes`.
+
+The installed skill is the detailed behavioral guide. Park's help output and the
+documentation remain the source of truth for the commands supported by the
 installed Park version. Do not assume that a newer skill adds commands that the
 installed binary does not expose.

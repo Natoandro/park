@@ -1,0 +1,73 @@
+use serde_json::{Value, json};
+
+use crate::result::CommandResult;
+
+const SOURCE: &str = "Natoandro/park";
+const PROJECT_INSTALL: &str = "npx skills add Natoandro/park --skill park -a opencode";
+const GLOBAL_INSTALL: &str = "npx skills add Natoandro/park --skill park -g -a opencode";
+const ONE_OFF_USE: &str = "npx skills use Natoandro/park --skill park --agent opencode";
+
+pub fn skills_help_result(json_output: bool) -> CommandResult<Value> {
+    if json_output {
+        CommandResult::success(Some(skills_data()), None)
+    } else {
+        CommandResult::success(Some(json!({"content": skills_guide()})), None)
+    }
+}
+
+fn skills_guide() -> &'static str {
+    "Park AI agent integration\n\nInstall the canonical skill for OpenCode:\n  Project: npx skills add Natoandro/park --skill park -a opencode\n  Global:  npx skills add Natoandro/park --skill park -g -a opencode\n\nUse it once without installing:\n  npx skills use Natoandro/park --skill park --agent opencode\n\nReplace opencode with another supported agent.\n\nRecommended workflow:\n  1. Run from the project directory associated with the process.\n  2. Inspect records: park ps --json\n  3. Launch: park <name> -- <command> [arguments...]\n  4. Wait for running or readiness output with park wait.\n  5. Diagnose with park status <name> --json and park logs <name>.\n  6. Stop or remove only records belonging to the task.\n\nSkill maintenance:\n  npx skills update park\n  npx skills remove park\n"
+}
+
+fn skills_data() -> Value {
+    json!({
+        "name": "park",
+        "source": SOURCE,
+        "install": {
+            "project": PROJECT_INSTALL,
+            "global": GLOBAL_INSTALL,
+            "one_off": ONE_OFF_USE,
+        },
+        "workflow": [
+            "Run from the project directory associated with the process.",
+            "Inspect records with park ps --json before choosing a name.",
+            "Launch with park <name> -- <command> [arguments...].",
+            "Wait for running or a literal readiness message with park wait.",
+            "Use park status <name> --json and park logs <name> to diagnose failures.",
+            "Stop or remove only records belonging to the task or explicitly requested by the user.",
+        ],
+        "maintenance": {
+            "update": "npx skills update park",
+            "remove": "npx skills remove park",
+        },
+        "exit_codes": {
+            "success": 0,
+            "failure": 1,
+            "usage_error": 2,
+            "missing_record": 3,
+            "duplicate_record": 4,
+            "invalid_lifecycle_state": 5,
+        },
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renders_human_skills_guide() {
+        let result = skills_help_result(false);
+        assert!(result.ok);
+        assert_eq!(result.data.expect("guide data")["content"], skills_guide());
+    }
+
+    #[test]
+    fn renders_machine_readable_skills_guide() {
+        let result = skills_help_result(true);
+        assert!(result.ok);
+        let data = result.data.expect("guide data");
+        assert_eq!(data["name"], "park");
+        assert_eq!(data["install"]["project"], PROJECT_INSTALL);
+    }
+}

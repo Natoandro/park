@@ -8,6 +8,13 @@ the process exit status rather than parsing human-readable messages.
 For installation and the complete agent workflow, see [AI Agent
 Integration](../ai-agents.md).
 
+The agent integration guide is also available without daemon access:
+
+```bash
+park help --skills
+park help --skills --json
+```
+
 ## JSON Output
 
 `ps`, `status`, and `logs` support `--json`:

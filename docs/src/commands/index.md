@@ -16,3 +16,5 @@ Use the command pages for the complete behavior of each operation:
   clean records.
 - [Logs](logs.md) inspect, filter, and follow retained output.
 - [Scripting](scripting.md) use JSON output, exit codes, and wait conditions.
+- [AI Agent Integration](../ai-agents.md) install the Park skill and discover the
+  agent workflow with `park help --skills`.

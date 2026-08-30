@@ -6,7 +6,7 @@ use park_cli::{
     request_for_clean, request_for_launch, request_for_logs, request_for_ps, request_for_remove,
     request_for_restart, request_for_signal, request_for_start, request_for_status,
     request_for_stop, request_for_wait, request_with_daemon_start, resolve_current_project,
-    run_daemon, stream_request_with_daemon_start,
+    run_daemon, skills_help_result, stream_request_with_daemon_start,
 };
 use serde_json::Value;
 
@@ -150,6 +150,10 @@ fn supervisor_usage_error(message: &str) -> ! {
 }
 
 async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> CommandResult<Value> {
+    if let Invocation::Operation(Operation::HelpSkills { json }) = &invocation {
+        return skills_help_result(*json);
+    }
+
     let paths = match StoragePaths::from_process_environment() {
         Ok(paths) => paths,
         Err(error) => return CommandResult::error(ResultStatus::Failure, error.to_string()),
@@ -259,6 +263,9 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
                 );
             };
             return CommandResult::success(data.get("record").cloned(), None);
+        }
+        Invocation::Operation(Operation::HelpSkills { .. }) => {
+            unreachable!("skills help is handled before daemon setup")
         }
     };
 

@@ -51,6 +51,13 @@ Use it for one session without installing it:
 npx skills use Natoandro/park --skill park --agent opencode
 ```
 
+Discover the integration guide from the installed binary:
+
+```bash
+park help --skills
+park help --skills --json
+```
+
 See [AI Agent Integration](docs/src/ai-agents.md) for other supported agents,
 updates, removal, and the recommended workflow.
 
@@ -143,6 +150,7 @@ park signal <name> <SIGNAL>
 park rm <name> [--keep-logs]
 park clean
 park wait <name> (--state STATE | --match TEXT | --exit) [--timeout DURATION]
+park help --skills [--json]
 ```
 
 `park logs` is the canonical log interface. JSON output, stable exit codes, predictable lookup, and non-interactive operation are public requirements because Park is intended to work well in scripts and coding-agent workflows.

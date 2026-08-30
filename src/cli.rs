@@ -36,6 +36,7 @@ pub enum Operation {
     Rm { name: OsString, keep_logs: bool },
     Clean,
     Wait(WaitArgs),
+    HelpSkills { json: bool },
 }
 
 impl Operation {
@@ -43,6 +44,7 @@ impl Operation {
         match self {
             Self::Ps { json } | Self::Status { json, .. } => *json,
             Self::Logs(args) => args.json,
+            Self::HelpSkills { json } => *json,
             _ => false,
         }
     }
@@ -90,7 +92,12 @@ struct RunCli {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "park", version, about = "Project-scoped local process manager")]
+#[command(
+    name = "park",
+    version,
+    about = "Project-scoped local process manager",
+    disable_help_subcommand = true
+)]
 struct OperationCli {
     #[command(subcommand)]
     operation: OperationCliCommand,
@@ -147,6 +154,13 @@ enum OperationCliCommand {
     Clean,
     #[command(name = "wait")]
     Wait(WaitCliArgs),
+    #[command(name = "help")]
+    Help {
+        #[arg(long, required = true)]
+        skills: bool,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -291,6 +305,7 @@ impl From<OperationCliCommand> for Operation {
                 exit: args.exit,
                 timeout: args.timeout,
             }),
+            OperationCliCommand::Help { json, .. } => Self::HelpSkills { json },
         }
     }
 }

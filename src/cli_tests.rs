@@ -71,6 +71,23 @@ fn parses_long_operation_alias() {
 }
 
 #[test]
+fn parses_skills_help() {
+    assert_eq!(
+        parse(&["park", "help", "--skills"]),
+        Invocation::Operation(Operation::HelpSkills { json: false })
+    );
+    assert_eq!(
+        parse(&["park", "help", "--skills", "--json"]),
+        Invocation::Operation(Operation::HelpSkills { json: true })
+    );
+}
+
+#[test]
+fn requires_a_help_topic() {
+    assert!(parse_invocation(["park", "help"] as [&str; 2]).is_err());
+}
+
+#[test]
 fn distinguishes_a_long_operation_alias_from_a_dash_prefixed_name() {
     assert_eq!(
         parse(&["park", "--status", "--", "./server"]),
