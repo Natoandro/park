@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use crate::process::{ProcessKey, ProcessRecord};
@@ -89,51 +89,51 @@ pub async fn send_request(
         source,
     })?;
 
-    let mut reader = BufReader::new(stream);
-    let mut line = Vec::new();
-    let bytes = reader
-        .read_until(b'\n', &mut line)
-        .await
-        .map_err(|source| IpcError::Io {
-            operation: "read daemon response",
-            source,
-        })?;
-    if bytes == 0 {
-        return Err(IpcError::Protocol(
-            "daemon closed the connection".to_owned(),
-        ));
-    }
-    if line.len() > MAX_MESSAGE_BYTES {
-        return Err(IpcError::Protocol(
-            "daemon response is too large".to_owned(),
-        ));
-    }
-    if line.last() == Some(&b'\n') {
-        line.pop();
-    }
-    serde_json::from_slice(&line).map_err(IpcError::Deserialize)
+    read_message(
+        stream,
+        "read daemon response",
+        "daemon closed the connection",
+        "daemon response is too large",
+    )
+    .await
 }
 
 pub async fn read_request(stream: &mut tokio::net::UnixStream) -> Result<IpcRequest, IpcError> {
-    let mut reader = BufReader::new(&mut *stream);
+    read_message(
+        &mut *stream,
+        "read daemon request",
+        "client closed the connection",
+        "daemon request is too large",
+    )
+    .await
+}
+
+async fn read_message<T, R>(
+    reader: R,
+    operation: &'static str,
+    closed_message: &'static str,
+    too_large_message: &'static str,
+) -> Result<T, IpcError>
+where
+    T: serde::de::DeserializeOwned,
+    R: AsyncRead + Unpin,
+{
     let mut line = Vec::new();
+    let mut reader = BufReader::new(reader).take((MAX_MESSAGE_BYTES + 1) as u64);
     let bytes = reader
         .read_until(b'\n', &mut line)
         .await
-        .map_err(|source| IpcError::Io {
-            operation: "read daemon request",
-            source,
-        })?;
+        .map_err(|source| IpcError::Io { operation, source })?;
     if bytes == 0 {
-        return Err(IpcError::Protocol(
-            "client closed the connection".to_owned(),
-        ));
+        return Err(IpcError::Protocol(closed_message.to_owned()));
     }
     if line.len() > MAX_MESSAGE_BYTES {
-        return Err(IpcError::Protocol("daemon request is too large".to_owned()));
+        return Err(IpcError::Protocol(too_large_message.to_owned()));
     }
-    if line.last() == Some(&b'\n') {
-        line.pop();
+    if line.pop() != Some(b'\n') {
+        return Err(IpcError::Protocol(
+            "IPC message must end with a newline".to_owned(),
+        ));
     }
     serde_json::from_slice(&line).map_err(IpcError::Deserialize)
 }
@@ -283,6 +283,7 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
     use std::path::PathBuf;
+    use tokio::io::{AsyncWriteExt, duplex};
 
     #[test]
     fn serializes_versioned_status_request() {
@@ -317,5 +318,57 @@ mod tests {
         .expect("request should deserialize");
         assert_eq!(decoded.request_id, 8);
         assert!(matches!(decoded.operation, IpcOperation::Launch { .. }));
+    }
+
+    #[test]
+    fn rejects_an_oversized_unterminated_message_without_unbounded_buffering() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should build");
+        runtime.block_on(async {
+            let (mut writer, reader) = duplex(MAX_MESSAGE_BYTES + 1);
+            writer
+                .write_all(&vec![b'x'; MAX_MESSAGE_BYTES + 1])
+                .await
+                .expect("test message should write");
+            writer.shutdown().await.expect("writer should close");
+
+            let error = read_message::<IpcRequest, _>(
+                reader,
+                "read test request",
+                "test writer closed",
+                "test request is too large",
+            )
+            .await
+            .expect_err("oversized message should fail");
+            assert!(matches!(error, IpcError::Protocol(message) if message == "test request is too large"));
+        });
+    }
+
+    #[test]
+    fn rejects_a_message_without_the_newline_delimiter() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should build");
+        runtime.block_on(async {
+            let (mut writer, reader) = duplex(64);
+            writer
+                .write_all(br#"{"version":1}"#)
+                .await
+                .expect("test message should write");
+            writer.shutdown().await.expect("writer should close");
+
+            let error = read_message::<IpcRequest, _>(
+                reader,
+                "read test request",
+                "test writer closed",
+                "test request is too large",
+            )
+            .await
+            .expect_err("unterminated message should fail");
+            assert!(matches!(error, IpcError::Protocol(message) if message == "IPC message must end with a newline"));
+        });
     }
 }
