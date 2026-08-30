@@ -44,7 +44,7 @@ Launch reserves its complete process key in the daemon for the check/create/spaw
 
 ## Logging
 
-Write stdout and stderr separately with append-only records. The combined `logs` view must preserve a deterministic ordering policy; a shared sequence number or timestamp assigned by the daemon is preferable to assuming independent file order. `--stdout` and `--stderr` read their respective streams. `--tail`, `--head`, and `--grep` operate on retained output; `--follow` observes new output and reports a clean terminal status.
+Write stdout and stderr separately with append-only records. The combined `logs` view uses the MVP's deterministic stdout-then-stderr ordering because capture files do not carry a shared event sequence. `--stdout` and `--stderr` read their respective streams. `--grep` is a literal substring filter on retained lines, applied before `--tail` or `--head`; `--follow` sends bounded IPC frames for the initial retained output and appended output, then reports a clean terminal status. Follow filters apply to the initial snapshot; later output is streamed without head/tail limits.
 
 Log rotation and retention are future configuration features. Their implementation must preserve the ability to inspect historical output associated with a retained record or explicitly state which history was pruned.
 

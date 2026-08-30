@@ -150,9 +150,9 @@ enum OperationCliCommand {
 struct LogsCliArgs {
     #[arg(value_name = "NAME", allow_hyphen_values = true)]
     name: OsString,
-    #[arg(long, value_name = "N")]
+    #[arg(long, value_name = "N", conflicts_with = "head")]
     tail: Option<u64>,
-    #[arg(long, value_name = "N")]
+    #[arg(long, value_name = "N", conflicts_with = "tail")]
     head: Option<u64>,
     #[arg(long)]
     follow: bool,

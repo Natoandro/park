@@ -44,7 +44,7 @@ Stopping is graceful by default: signal the managed process group, wait for a co
 
 - The short start form is `park <name> -- <command> [arguments...]`; `run` may be an alias but is not required for normal use.
 - `ps`, `status`, and lifecycle commands resolve only within the current project's canonical path.
-- Logs stay available after a command exits. Standard output and standard error are retained independently and can also be presented together.
+- Logs stay available after a command exits. Standard output and standard error are retained independently and can also be presented together in deterministic stdout-then-stderr order.
 - `--json` is a first-class output mode for process inspection and should use documented, stable fields.
 - Commands must be non-interactive unless explicitly requested. Stable exit semantics distinguish normal failure, missing records, duplicate records, and invalid transitions.
 

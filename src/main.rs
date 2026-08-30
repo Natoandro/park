@@ -1,9 +1,11 @@
-use std::{env, process};
+use std::{env, io::Write, process};
 
 use park_cli::{
-    CommandResult, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, Invocation, Operation,
-    ResultStatus, StoragePaths, parse_invocation, render_json, request_for_launch, request_for_ps,
-    request_for_status, request_with_daemon_start, resolve_current_project, run_daemon,
+    CommandResult, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, Invocation,
+    IpcLogOptions, Operation, ResultStatus, StoragePaths, parse_invocation, render_json,
+    request_for_launch, request_for_logs, request_for_ps, request_for_status,
+    request_with_daemon_start, resolve_current_project, run_daemon,
+    stream_request_with_daemon_start,
 };
 use serde_json::Value;
 
@@ -41,23 +43,38 @@ fn main() {
     };
 
     let requests_json = invocation.requests_json();
+    let follows_logs = matches!(
+        &invocation,
+        Invocation::Operation(Operation::Logs(args)) if args.follow
+    );
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("client runtime should be created");
-    let result = runtime.block_on(execute(invocation));
+    let mut follow_output = |chunk: &str| {
+        let mut stdout = std::io::stdout().lock();
+        let _ = stdout.write_all(chunk.as_bytes());
+        let _ = stdout.flush();
+    };
+    let result = runtime.block_on(execute(invocation, &mut follow_output));
 
     if requests_json {
         println!(
             "{}",
             render_json(&result).expect("the result schema must be serializable")
         );
+    } else if follows_logs && result.ok {
+        // Follow output is written as each IPC frame arrives.
     } else if result.ok {
         if let Some(data) = &result.data {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(data).expect("response data should serialize")
-            );
+            if let Some(content) = data.get("content").and_then(Value::as_str) {
+                print!("{content}");
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(data).expect("response data should serialize")
+                );
+            }
         } else {
             println!("{}", result.human_message());
         }
@@ -131,7 +148,7 @@ fn supervisor_usage_error(message: &str) -> ! {
     process::exit(ResultStatus::Failure.exit_code().into());
 }
 
-async fn execute(invocation: Invocation) -> CommandResult<Value> {
+async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> CommandResult<Value> {
     let paths = match StoragePaths::from_process_environment() {
         Ok(paths) => paths,
         Err(error) => return CommandResult::error(ResultStatus::Failure, error.to_string()),
@@ -146,6 +163,59 @@ async fn execute(invocation: Invocation) -> CommandResult<Value> {
         Invocation::Operation(Operation::Ps { .. }) => request_for_ps(1, project),
         Invocation::Operation(Operation::Status { name, .. }) => {
             request_for_status(1, park_cli::ProcessKey::new(project, name))
+        }
+        Invocation::Operation(Operation::Logs(args)) => {
+            let stream = if args.stdout {
+                "stdout"
+            } else if args.stderr {
+                "stderr"
+            } else {
+                "combined"
+            };
+            let mut content = String::new();
+            let request = request_for_logs(
+                1,
+                park_cli::ProcessKey::new(project, args.name.clone()),
+                IpcLogOptions {
+                    tail: args.tail,
+                    head: args.head,
+                    follow: args.follow,
+                    grep: args.grep.clone(),
+                    stdout: args.stdout,
+                    stderr: args.stderr,
+                },
+            );
+            let response = match stream_request_with_daemon_start(&paths, &request, |chunk| {
+                content.push_str(chunk);
+                if args.follow && !args.json {
+                    on_follow(chunk);
+                }
+            })
+            .await
+            {
+                Ok(response) => response,
+                Err(error) => {
+                    return CommandResult::error(ResultStatus::Failure, error.to_string());
+                }
+            };
+            if !response.result.ok {
+                return response.result;
+            }
+            let state = response
+                .result
+                .data
+                .as_ref()
+                .and_then(|data| data.get("state"))
+                .cloned()
+                .unwrap_or(Value::Null);
+            return CommandResult::success(
+                Some(serde_json::json!({
+                    "stream": stream,
+                    "content": content,
+                    "state": state,
+                })),
+                None,
+            );
         }
         Invocation::Operation(other) => {
             return CommandResult::error(

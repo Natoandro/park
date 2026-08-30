@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
 use crate::process::{ProcessKey, ProcessRecord};
@@ -38,6 +38,25 @@ pub enum IpcOperation {
     Status {
         key: ProcessKey,
     },
+    Logs {
+        key: ProcessKey,
+        tail: Option<u64>,
+        head: Option<u64>,
+        follow: bool,
+        grep: Option<String>,
+        stdout: bool,
+        stderr: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IpcLogOptions {
+    pub tail: Option<u64>,
+    pub head: Option<u64>,
+    pub follow: bool,
+    pub grep: Option<String>,
+    pub stdout: bool,
+    pub stderr: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,6 +118,59 @@ pub async fn send_request(
     validate_response(request, response)
 }
 
+pub async fn send_stream_request<F>(
+    socket_path: &Path,
+    request: &IpcRequest,
+    mut on_chunk: F,
+) -> Result<IpcResponse, IpcError>
+where
+    F: FnMut(&str),
+{
+    let mut stream = UnixStream::connect(socket_path)
+        .await
+        .map_err(|source| IpcError::Io {
+            operation: "connect to daemon",
+            source,
+        })?;
+    let mut payload = serde_json::to_vec(request).map_err(IpcError::Serialize)?;
+    payload.push(b'\n');
+    stream
+        .write_all(&payload)
+        .await
+        .map_err(|source| IpcError::Io {
+            operation: "send daemon request",
+            source,
+        })?;
+    stream.shutdown().await.map_err(|source| IpcError::Io {
+        operation: "finish daemon request",
+        source,
+    })?;
+
+    loop {
+        let response: IpcResponse = read_message(
+            &mut stream,
+            "read daemon stream",
+            "daemon closed the stream",
+            "daemon stream message is too large",
+        )
+        .await?;
+        let response = validate_response(request, response)?;
+        if !response.result.ok {
+            return Ok(response);
+        }
+        let data =
+            response.result.data.as_ref().ok_or_else(|| {
+                IpcError::Protocol("daemon stream frame is missing data".to_owned())
+            })?;
+        if data.get("done").and_then(serde_json::Value::as_bool) == Some(true) {
+            return Ok(response);
+        }
+        if let Some(content) = data.get("content").and_then(serde_json::Value::as_str) {
+            on_chunk(content);
+        }
+    }
+}
+
 fn validate_response(request: &IpcRequest, response: IpcResponse) -> Result<IpcResponse, IpcError> {
     if response.version != PROTOCOL_VERSION {
         return Err(IpcError::Protocol(format!(
@@ -126,7 +198,7 @@ pub async fn read_request(stream: &mut tokio::net::UnixStream) -> Result<IpcRequ
 }
 
 async fn read_message<T, R>(
-    reader: R,
+    mut reader: R,
     operation: &'static str,
     closed_message: &'static str,
     too_large_message: &'static str,
@@ -136,22 +208,29 @@ where
     R: AsyncRead + Unpin,
 {
     let mut line = Vec::new();
-    let mut reader = BufReader::new(reader).take((MAX_MESSAGE_BYTES + 1) as u64);
-    let bytes = reader
-        .read_until(b'\n', &mut line)
-        .await
-        .map_err(|source| IpcError::Io { operation, source })?;
-    if bytes == 0 {
-        return Err(IpcError::Protocol(closed_message.to_owned()));
+    let mut byte = [0_u8; 1];
+    loop {
+        let bytes = reader
+            .read(&mut byte)
+            .await
+            .map_err(|source| IpcError::Io { operation, source })?;
+        if bytes == 0 {
+            if line.is_empty() {
+                return Err(IpcError::Protocol(closed_message.to_owned()));
+            }
+            return Err(IpcError::Protocol(
+                "IPC message must end with a newline".to_owned(),
+            ));
+        }
+        line.push(byte[0]);
+        if line.len() > MAX_MESSAGE_BYTES {
+            return Err(IpcError::Protocol(too_large_message.to_owned()));
+        }
+        if byte[0] == b'\n' {
+            break;
+        }
     }
-    if line.len() > MAX_MESSAGE_BYTES {
-        return Err(IpcError::Protocol(too_large_message.to_owned()));
-    }
-    if line.pop() != Some(b'\n') {
-        return Err(IpcError::Protocol(
-            "IPC message must end with a newline".to_owned(),
-        ));
-    }
+    line.pop();
     serde_json::from_slice(&line).map_err(IpcError::Deserialize)
 }
 
@@ -200,6 +279,22 @@ pub fn request_for_status(request_id: u64, key: ProcessKey) -> IpcRequest {
         version: PROTOCOL_VERSION,
         request_id,
         operation: IpcOperation::Status { key },
+    }
+}
+
+pub fn request_for_logs(request_id: u64, key: ProcessKey, options: IpcLogOptions) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Logs {
+            key,
+            tail: options.tail,
+            head: options.head,
+            follow: options.follow,
+            grep: options.grep,
+            stdout: options.stdout,
+            stderr: options.stderr,
+        },
     }
 }
 

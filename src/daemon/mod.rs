@@ -19,6 +19,7 @@ use crate::result::ResultStatus;
 use crate::storage::{Storage, StorageError, StoragePaths};
 
 mod launch;
+mod logs;
 mod monitor;
 mod process_identity;
 
@@ -160,23 +161,43 @@ async fn serve_connection(mut stream: UnixStream, state: Arc<DaemonState>) -> Re
         }
     };
     let response = dispatch_request(&state, request).await;
-    write_response(&mut stream, &response).await
+    match response {
+        DispatchResponse::Single(response) => write_response(&mut stream, &response).await,
+        DispatchResponse::Logs {
+            request_id,
+            key,
+            options,
+        } => logs::serve(&state, request_id, key, options, &mut stream).await,
+    }
 }
 
-async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> IpcResponse {
+enum DispatchResponse {
+    Single(IpcResponse),
+    Logs {
+        request_id: u64,
+        key: ProcessKey,
+        options: logs::LogOptions,
+    },
+}
+
+async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchResponse {
     if request.version != PROTOCOL_VERSION {
-        return IpcResponse::error(
+        return DispatchResponse::Single(IpcResponse::error(
             request.request_id,
             ResultStatus::Failure,
             format!("unsupported IPC protocol version {}", request.version),
-        );
+        ));
     }
 
     let request_id = request.request_id;
     let operation = match canonicalize_operation(request.operation) {
         Ok(operation) => operation,
         Err(error) => {
-            return IpcResponse::error(request_id, ResultStatus::Failure, error.to_string());
+            return DispatchResponse::Single(IpcResponse::error(
+                request_id,
+                ResultStatus::Failure,
+                error.to_string(),
+            ));
         }
     };
     match operation {
@@ -184,7 +205,29 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> IpcRespon
             project_path,
             name,
             command,
-        } => launch::start(state, request_id, project_path, name, command).await,
+        } => DispatchResponse::Single(
+            launch::start(state, request_id, project_path, name, command).await,
+        ),
+        IpcOperation::Logs {
+            key,
+            tail,
+            head,
+            follow,
+            grep,
+            stdout,
+            stderr,
+        } => DispatchResponse::Logs {
+            request_id,
+            key,
+            options: logs::LogOptions {
+                tail,
+                head,
+                follow,
+                grep,
+                stdout,
+                stderr,
+            },
+        },
         operation => handle_request(
             &state.storage,
             IpcRequest {
@@ -192,7 +235,14 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> IpcRespon
                 request_id,
                 operation,
             },
-        ),
+        )
+        .into(),
+    }
+}
+
+impl From<IpcResponse> for DispatchResponse {
+    fn from(response: IpcResponse) -> Self {
+        Self::Single(response)
     }
 }
 
@@ -218,6 +268,26 @@ fn canonicalize_operation(
                 key.name().to_os_string(),
             ),
         }),
+        IpcOperation::Logs {
+            key,
+            tail,
+            head,
+            follow,
+            grep,
+            stdout,
+            stderr,
+        } => Ok(IpcOperation::Logs {
+            key: ProcessKey::new(
+                resolve_project(key.project_path())?,
+                key.name().to_os_string(),
+            ),
+            tail,
+            head,
+            follow,
+            grep,
+            stdout,
+            stderr,
+        }),
         IpcOperation::Ping => Ok(IpcOperation::Ping),
     }
 }
@@ -231,12 +301,21 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
         );
     }
 
+    if let Err(error) = storage.reconcile(epoch_seconds(), record_is_alive) {
+        return storage_error(request.request_id, error);
+    }
+
     match request.operation {
         IpcOperation::Ping => IpcResponse::success(request.request_id, None),
         IpcOperation::Launch { .. } => IpcResponse::error(
             request.request_id,
             ResultStatus::Failure,
             "launch requests require the daemon dispatcher",
+        ),
+        IpcOperation::Logs { .. } => IpcResponse::error(
+            request.request_id,
+            ResultStatus::Failure,
+            "log requests require the daemon dispatcher",
         ),
         IpcOperation::Ps { project_path } => {
             let records = match storage.list_records() {
@@ -248,10 +327,12 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
             };
             let mut records = records;
             records.sort_by(|left, right| {
+                use std::os::unix::ffi::OsStrExt;
+
                 left.key()
                     .name()
-                    .to_string_lossy()
-                    .cmp(&right.key().name().to_string_lossy())
+                    .as_bytes()
+                    .cmp(right.key().name().as_bytes())
             });
             let values = records
                 .iter()

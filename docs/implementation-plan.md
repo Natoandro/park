@@ -129,15 +129,23 @@ Phase 5 implementation decisions:
 
 ## Phase 6: Inspection and Logs
 
-- [ ] Implement `park ps` for the current project with deterministic ordering.
-- [ ] Implement `park status <name>` using persisted state and reconciled liveness.
-- [ ] Implement matching JSON representations with documented stable field names.
-- [ ] Implement combined `park logs <name>` plus independent `--stdout` and `--stderr` views.
-- [ ] Specify and implement deterministic ordering for combined streams, such as daemon-assigned sequence numbers.
-- [ ] Implement `--tail`, `--head`, and literal/regex search only after deciding the search contract.
-- [ ] Implement `--follow` as a streaming IPC request that does not block log draining.
-- [ ] End a follow session cleanly when the process exits, including its terminal result.
-- [ ] Test retained logs after exit, empty logs, follow termination, filtered output, and slow readers.
+- [x] Implement `park ps` for the current project with deterministic ordering.
+- [x] Implement `park status <name>` using persisted state and reconciled liveness.
+- [x] Implement matching JSON representations with documented stable field names.
+- [x] Implement combined `park logs <name>` plus independent `--stdout` and `--stderr` views.
+- [x] Specify and implement deterministic ordering for combined streams, such as daemon-assigned sequence numbers.
+- [x] Implement `--tail`, `--head`, and literal search after deciding the search contract.
+- [x] Implement `--follow` as a streaming IPC request that does not block log draining.
+- [x] End a follow session cleanly when the process exits, including its terminal result.
+- [x] Test retained logs after exit, empty logs, follow termination, filtered output, and slow readers.
+
+Phase 6 implementation decisions:
+
+- `ps` and `status` reconcile active records against verified process identity before reading them. `ps` sorts names by their raw Unix argument bytes, preserving deterministic ordering for non-UTF-8 names.
+- Log JSON data uses stable `stream`, `content`, and `state` fields. Content is returned as UTF-8 with replacement for invalid bytes; the durable files retain the original bytes.
+- Combined output is stdout followed by stderr. This is deterministic but does not claim to reconstruct cross-stream event timing.
+- `--grep` is a literal substring filter applied line-by-line before `--head` or `--tail`. Regex search is deferred rather than adding another dependency.
+- Log responses use bounded newline-delimited JSON frames. Follow emits the initial snapshot and appended content, then a terminal frame containing the observed state. Initial head/tail/filter options apply to the retained snapshot; subsequent follow content is not head/tail limited.
 
 ## Phase 7: Lifecycle Control
 

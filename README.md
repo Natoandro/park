@@ -36,7 +36,7 @@ The same name can be used in separate projects. `dev` in `~/code/shop` and `dev`
 park <name> -- <command> [arguments...]
 park ps [--json]
 park status <name> [--json]
-park logs <name> [--tail N] [--head N] [--follow] [--grep PATTERN] [--stdout|--stderr]
+park logs <name> [--tail N|--head N] [--follow] [--grep PATTERN] [--stdout|--stderr] [--json]
 park stop <name> [--force]
 park restart <name>
 park start <name>
@@ -47,6 +47,8 @@ park wait <name> (--state STATE | --match TEXT | --exit) [--timeout DURATION]
 ```
 
 `park logs` is the canonical log interface. JSON output, stable exit codes, predictable lookup, and non-interactive operation are public requirements because Park is intended to work well in scripts and coding-agent workflows.
+
+Without `--stdout` or `--stderr`, logs are combined deterministically as stdout followed by stderr. `--grep` performs a literal substring search on retained lines before `--head` or `--tail` is applied; regular expressions are not supported. With `--follow`, the initial retained output honors these filters and subsequent output is streamed as it is appended.
 
 The operation subcommands also accept long-option aliases such as `park --status dev`, while the readable subcommand form remains canonical. The `--` separator marks the start of the managed command and its arguments. Process names are opaque command-line arguments: Park does not reserve operation words or impose lexical name validation, so names such as `status` and `--status` are valid when used in the launch form, for example `park status -- ./server`.
 

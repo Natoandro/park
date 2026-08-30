@@ -266,6 +266,90 @@ fn drains_large_output_without_blocking_the_child() {
             .len(),
         200_000
     );
+    let logs = environment.run(&["logs", "large-output"]);
+    assert!(logs.status.success(), "stderr: {:?}", logs.stderr);
+    assert_eq!(logs.stdout.len(), 200_000);
+}
+
+#[test]
+fn reads_retained_logs_with_stream_selection_and_filters() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&[
+        "inspect",
+        "--",
+        "/bin/sh",
+        "-c",
+        "printf 'one\\nkeep\\nlast\\n'; printf 'err\\nkeep err\\n' >&2",
+    ]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    assert_eq!(wait_for_state(&environment, "inspect"), "exited");
+
+    let stdout = environment.run(&["logs", "inspect", "--stdout"]);
+    assert!(stdout.status.success(), "stderr: {:?}", stdout.stderr);
+    assert_eq!(String::from_utf8_lossy(&stdout.stdout), "one\nkeep\nlast\n");
+
+    let stderr = environment.run(&["logs", "inspect", "--stderr"]);
+    assert!(stderr.status.success(), "stderr: {:?}", stderr.stderr);
+    assert_eq!(String::from_utf8_lossy(&stderr.stdout), "err\nkeep err\n");
+
+    let filtered = environment.run(&["logs", "inspect", "--grep", "keep", "--tail", "1"]);
+    assert!(filtered.status.success(), "stderr: {:?}", filtered.stderr);
+    assert_eq!(String::from_utf8_lossy(&filtered.stdout), "keep err\n");
+
+    let json = environment.run(&["logs", "inspect", "--stdout", "--json"]);
+    assert!(json.status.success(), "stderr: {:?}", json.stderr);
+    let response: Value = serde_json::from_slice(&json.stdout).expect("logs should be JSON");
+    assert_eq!(response["data"]["stream"], "stdout");
+    assert_eq!(response["data"]["content"], "one\nkeep\nlast\n");
+    assert_eq!(response["data"]["state"], "exited");
+}
+
+#[test]
+fn follows_log_output_until_the_process_exits() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&[
+        "follow",
+        "--",
+        "/bin/sh",
+        "-c",
+        "printf first; sleep .2; printf second",
+    ]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+
+    let output = environment.run(&["logs", "follow", "--follow"]);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "firstsecond");
+}
+
+#[test]
+fn reads_empty_retained_logs_successfully() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["empty", "--", "/bin/true"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    assert_eq!(wait_for_state(&environment, "empty"), "exited");
+
+    let logs = environment.run(&["logs", "empty"]);
+    assert!(logs.status.success(), "stderr: {:?}", logs.stderr);
+    assert!(logs.stdout.is_empty());
+}
+
+#[test]
+fn ps_orders_records_by_opaque_name() {
+    let environment = TestEnvironment::new();
+    for name in ["zeta", "alpha"] {
+        let launch = environment.run(&[name, "--", "/bin/true"]);
+        assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+        assert_eq!(wait_for_state(&environment, name), "exited");
+    }
+
+    let output = environment.run(&["ps", "--json"]);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    let response: Value = serde_json::from_slice(&output.stdout).expect("ps should be JSON");
+    let records = response["data"]
+        .as_array()
+        .expect("ps data should be an array");
+    assert_eq!(records[0]["key"]["name"], "616c706861");
+    assert_eq!(records[1]["key"]["name"], "7a657461");
 }
 
 #[cfg(target_os = "linux")]

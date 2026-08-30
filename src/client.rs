@@ -6,7 +6,7 @@ use thiserror::Error;
 use tokio::time::sleep;
 
 use crate::daemon::INTERNAL_DAEMON_ARGUMENT;
-use crate::ipc::{IpcError, IpcRequest, IpcResponse, send_request};
+use crate::ipc::{IpcError, IpcRequest, IpcResponse, send_request, send_stream_request};
 use crate::storage::{StorageError, StoragePaths};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(3);
@@ -25,6 +25,40 @@ pub async fn request_with_daemon_start(
             Ok(response) => return Ok(response),
             Err(error) => error,
         };
+
+        if !started && should_start_daemon(&last_error) {
+            spawn_daemon()?;
+            started = true;
+        }
+        if !started || !should_start_daemon(&last_error) {
+            return Err(last_error.into());
+        }
+        if Instant::now() >= deadline {
+            return Err(ClientError::StartupTimeout { source: last_error });
+        }
+        sleep(RETRY_INTERVAL).await;
+    }
+}
+
+pub async fn stream_request_with_daemon_start<F>(
+    paths: &StoragePaths,
+    request: &IpcRequest,
+    on_chunk: F,
+) -> Result<IpcResponse, ClientError>
+where
+    F: FnMut(&str),
+{
+    paths.ensure_directories()?;
+    let deadline = Instant::now() + STARTUP_TIMEOUT;
+    let mut started = false;
+    let mut on_chunk = on_chunk;
+
+    loop {
+        let last_error =
+            match send_stream_request(&paths.socket_path(), request, &mut on_chunk).await {
+                Ok(response) => return Ok(response),
+                Err(error) => error,
+            };
 
         if !started && should_start_daemon(&last_error) {
             spawn_daemon()?;
