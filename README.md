@@ -48,6 +48,24 @@ park stop dev
 
 The same name can be used in separate projects. `dev` in `~/code/shop` and `dev` in `~/code/api` are independent process records.
 
+## Development
+
+Enable the repository's pre-commit version check once per checkout:
+
+```bash
+scripts/setup-hooks.sh
+```
+
+Release tags must match the workspace version, for example `v0.1.0` for version
+`0.1.0`.
+
+Bump all workspace package versions and refresh `Cargo.lock`:
+
+```bash
+scripts/bump-version.sh patch
+scripts/bump-version.sh 0.2.0
+```
+
 ## Intended Interface
 
 ```text

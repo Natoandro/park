@@ -1,0 +1,61 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_VERSION: 1.85.0
+
+jobs:
+  rust:
+    name: Rust checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: >-
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          --component rustfmt --component clippy --no-self-update
+
+      - name: Check workspace versions
+        run: ./scripts/check-version.sh
+
+      - name: Check formatting
+        run: cargo "+$RUST_VERSION" fmt --all -- --check
+
+      - name: Run tests
+        run: cargo "+$RUST_VERSION" test --workspace --all-targets --locked
+
+      - name: Run clippy
+        run: >-
+          cargo "+$RUST_VERSION" clippy --workspace --all-targets
+          --all-features --locked -- -D warnings
+
+  e2e:
+    name: Linux Docker E2E
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build E2E image
+        run: >-
+          docker build --build-arg RUST_VERSION=1.85
+          --file docker/e2e/Dockerfile --tag park-e2e:ci .
+
+      - name: Run E2E scenarios
+        run: >-
+          docker run --rm --init --network none --cap-drop=ALL
+          --security-opt=no-new-privileges --pids-limit=256 park-e2e:ci

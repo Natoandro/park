@@ -1,0 +1,74 @@
+name: Release binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  RUST_VERSION: 1.85.0
+
+jobs:
+  build:
+    name: Build binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: >-
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          --no-self-update
+
+      - name: Check release tag version
+        run: ./scripts/check-version.sh "$GITHUB_REF_NAME"
+
+      - name: Build release binary
+        run: cargo "+$RUST_VERSION" build --locked --release --bin park
+
+      - name: Package binary
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          target="x86_64-unknown-linux-gnu"
+          staging="dist/park-${RELEASE_TAG}-${target}"
+          mkdir -p "$staging"
+          install -Dm755 target/release/park "$staging/park"
+          cp LICENSE README.md "$staging/"
+          tar -C dist -czf "park-${RELEASE_TAG}-${target}.tar.gz" \
+            "park-${RELEASE_TAG}-${target}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-binary
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  github-release:
+    name: Create GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: park-binary
+          path: dist
+
+      - name: Create checksums
+        run: sha256sum dist/*.tar.gz > dist/SHA256SUMS
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --title "Park $GITHUB_REF_NAME" --generate-notes

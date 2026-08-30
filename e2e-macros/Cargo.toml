@@ -3,6 +3,9 @@ name = "park-e2e-macros"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+description = "Build-time metadata macro for Park end-to-end scenarios"
+license = "Apache-2.0"
+repository = "https://github.com/Natoandro/park"
 
 [lib]
 proc-macro = true
