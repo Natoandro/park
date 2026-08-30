@@ -98,6 +98,9 @@ scripts/bump-version.sh patch
 scripts/bump-version.sh 0.2.0
 ```
 
+See [Contributing](CONTRIBUTING.md) for local build, test, documentation, and
+release instructions.
+
 ## Intended Interface
 
 ```text

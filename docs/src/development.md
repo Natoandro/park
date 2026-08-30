@@ -62,23 +62,3 @@ The post-MVP roadmap includes:
 These planned features must preserve configuration-free launches and the
 existing project/name identity. Process isolation and sandboxing are not planned
 as Park core features.
-
-## Local Checkout
-
-To install the current checkout while working with the development version:
-
-```bash
-cargo install --path .
-```
-
-The repository also provides setup and version-management scripts:
-
-```bash
-scripts/setup-hooks.sh
-scripts/bump-version.sh patch
-scripts/bump-version.sh 0.2.0
-```
-
-The setup script enables the repository's pre-commit version check once per
-checkout. Release tags must match the workspace version, such as `v0.1.0` for
-version `0.1.0`.
