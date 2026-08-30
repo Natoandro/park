@@ -34,6 +34,8 @@ Use versioned, newline-delimited JSON request/response messages with an operatio
 
 If spawn fails, retain a `failed` record with the diagnostic rather than leaving a partial running record. On daemon startup, reconcile non-terminal records against live PIDs/process groups and mark dead processes as terminal without discarding their logs.
 
+Launch reserves its complete process key in the daemon for the check/create/spawn transaction. A concurrent request receives the duplicate-record result. If logs remain without a record after an interrupted pre-spawn attempt, the next reserved launch removes only the key-derived stale logs before recreating them. Capture and wait failures terminate the managed group when necessary, transition the record to `failed`, and retry durable persistence with capped backoff until it succeeds.
+
 ## Lifecycle Semantics
 
 `stop` transitions a running record to `stopping`, sends SIGTERM to its process group, waits for the configured grace period, and sends SIGKILL only if still alive. `--force` skips directly to forceful termination. `signal` validates the requested supported signal and targets the same group. Terminal transitions record either the exit code or signal, and no lifecycle action may silently overwrite a record.

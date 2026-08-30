@@ -4,16 +4,14 @@ use std::path::{Path, PathBuf};
 
 use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
-use tokio::fs::OpenOptions;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::process::{Child, ChildStderr, ChildStdout, Command};
+use tokio::process::{Child, Command};
 
 use crate::ipc::{IpcResponse, record_value};
 use crate::process::{ProcessKey, ProcessRecord};
 use crate::project::ProjectPath;
 use crate::result::ResultStatus;
 
-use super::{DaemonState, INTERNAL_SUPERVISOR_ARGUMENT, epoch_seconds, process_identity};
+use super::{DaemonState, INTERNAL_SUPERVISOR_ARGUMENT, epoch_seconds, monitor, process_identity};
 
 pub(super) async fn start(
     state: &DaemonState,
@@ -23,14 +21,11 @@ pub(super) async fn start(
     command: Vec<OsString>,
 ) -> IpcResponse {
     let key = ProcessKey::new(project_path.clone(), name);
+    let Some(_reservation) = state.reserve_launch(key.clone()) else {
+        return duplicate_response(request_id);
+    };
     match state.storage.load_record(&key) {
-        Ok(Some(_)) => {
-            return IpcResponse::error(
-                request_id,
-                ResultStatus::DuplicateRecord,
-                "a process with this name already exists in the project",
-            );
-        }
+        Ok(Some(_)) => return duplicate_response(request_id),
         Ok(None) => {}
         Err(error) => return storage_failure(request_id, error.to_string()),
     }
@@ -40,9 +35,14 @@ pub(super) async fn start(
         return IpcResponse::error(request_id, ResultStatus::Failure, "launch command is empty");
     };
     let arguments = command_parts.collect::<Vec<_>>();
-    let logs = match state.storage.create_logs(&key) {
+    let logs = match create_logs_for_launch(&state.storage, &key) {
         Ok(logs) => logs,
-        Err(error) => return storage_failure(request_id, error.to_string()),
+        Err(error) => {
+            if matches!(state.storage.load_record(&key), Ok(Some(_))) {
+                return duplicate_response(request_id);
+            }
+            return storage_failure(request_id, error.to_string());
+        }
     };
     let working_directory = project_path.as_path().to_path_buf();
     let mut record = ProcessRecord::new(
@@ -54,6 +54,10 @@ pub(super) async fn start(
         logs,
     );
     if let Err(error) = state.storage.create_record(&record) {
+        if matches!(state.storage.load_record(&key), Ok(Some(_))) {
+            return duplicate_response(request_id);
+        }
+        let _ = state.storage.remove_logs(&key);
         return storage_failure(request_id, error.to_string());
     }
 
@@ -158,9 +162,34 @@ pub(super) async fn start(
     };
     let storage = state.storage.clone();
     tokio::spawn(async move {
-        monitor_child(storage, key, child, stdout, stderr).await;
+        monitor::monitor_child(storage, key, child, stdout, stderr).await;
     });
     response
+}
+
+fn duplicate_response(request_id: u64) -> IpcResponse {
+    IpcResponse::error(
+        request_id,
+        ResultStatus::DuplicateRecord,
+        "a process with this name already exists in the project",
+    )
+}
+
+fn create_logs_for_launch(
+    storage: &crate::storage::Storage,
+    key: &ProcessKey,
+) -> Result<crate::process::LogPaths, crate::storage::StorageError> {
+    match storage.create_logs(key) {
+        Ok(logs) => Ok(logs),
+        Err(error @ crate::storage::StorageError::RecordExists { .. }) => {
+            if storage.load_record(key)?.is_some() {
+                return Err(error);
+            }
+            storage.remove_logs(key)?;
+            storage.create_logs(key)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn validate_executable(executable: &OsString) -> io::Result<()> {
@@ -279,64 +308,6 @@ fn persist_start_failure(
             format!("{reason}; could not persist failed record: {error}"),
         ),
     }
-}
-
-async fn monitor_child(
-    storage: crate::storage::Storage,
-    key: ProcessKey,
-    mut child: Child,
-    stdout: ChildStdout,
-    stderr: ChildStderr,
-) {
-    let stdout_task = tokio::spawn(capture_output(stdout, storage_path(&storage, &key, true)));
-    let stderr_task = tokio::spawn(capture_output(stderr, storage_path(&storage, &key, false)));
-    let status = child.wait().await;
-    let _ = stdout_task.await;
-    let _ = stderr_task.await;
-
-    let Ok(status) = status else {
-        return;
-    };
-    let Ok(Some(mut record)) = storage.load_record(&key) else {
-        return;
-    };
-    if record.state().is_terminal() {
-        return;
-    }
-    let termination_signal = exit_signal(&status);
-    let _ = record.mark_terminated(epoch_seconds(), status.code(), termination_signal);
-    let _ = storage.save_record(&record);
-}
-
-fn storage_path(storage: &crate::storage::Storage, key: &ProcessKey, stdout: bool) -> PathBuf {
-    let logs = storage.log_paths(key);
-    if stdout { logs.stdout } else { logs.stderr }
-}
-
-async fn capture_output<R>(mut reader: R, path: PathBuf) -> io::Result<()>
-where
-    R: AsyncRead + Unpin,
-{
-    let mut file = OpenOptions::new().append(true).open(path).await?;
-    let mut buffer = [0_u8; 16 * 1024];
-    loop {
-        let count = reader.read(&mut buffer).await?;
-        if count == 0 {
-            return Ok(());
-        }
-        file.write_all(&buffer[..count]).await?;
-    }
-}
-
-#[cfg(unix)]
-fn exit_signal(status: &std::process::ExitStatus) -> Option<i32> {
-    use std::os::unix::process::ExitStatusExt;
-    status.signal()
-}
-
-#[cfg(not(unix))]
-fn exit_signal(_status: &std::process::ExitStatus) -> Option<i32> {
-    None
 }
 
 fn kill_process_group(pid: u32) -> nix::Result<()> {

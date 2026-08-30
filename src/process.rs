@@ -229,6 +229,17 @@ impl ProcessRecord {
         Ok(())
     }
 
+    pub fn mark_monitor_failed(
+        &mut self,
+        exited_at: EpochSeconds,
+        reason: impl Into<String>,
+    ) -> Result<(), InvalidStateTransition> {
+        self.transition_to(ProcessState::Failed)?;
+        self.exited_at = Some(exited_at);
+        self.failure_reason = Some(reason.into());
+        Ok(())
+    }
+
     pub fn mark_terminated(
         &mut self,
         exited_at: EpochSeconds,

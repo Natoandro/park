@@ -151,6 +151,12 @@ impl Storage {
         Ok(paths)
     }
 
+    pub(crate) fn remove_logs(&self, key: &ProcessKey) -> Result<(), StorageError> {
+        let logs = self.log_paths(key);
+        files::remove_if_present(&logs.stdout)?;
+        files::remove_if_present(&logs.stderr)
+    }
+
     pub fn create_record(&self, record: &ProcessRecord) -> Result<(), StorageError> {
         self.paths.ensure_directories()?;
         let path = self.record_path(record.key());

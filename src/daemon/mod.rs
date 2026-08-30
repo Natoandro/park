@@ -1,7 +1,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nix::errno::Errno;
@@ -13,11 +13,12 @@ use crate::ipc::{
     IpcError, IpcOperation, IpcRequest, IpcResponse, PROTOCOL_VERSION, read_request, record_value,
     write_response,
 };
-use crate::process::ProcessRecord;
+use crate::process::{ProcessKey, ProcessRecord};
 use crate::result::ResultStatus;
 use crate::storage::{Storage, StorageError, StoragePaths};
 
 mod launch;
+mod monitor;
 mod process_identity;
 
 pub const INTERNAL_DAEMON_ARGUMENT: &str = "--internal-daemon";
@@ -87,9 +88,39 @@ impl Drop for DaemonLock {
     }
 }
 
-#[derive(Clone)]
 pub(super) struct DaemonState {
     pub(super) storage: Storage,
+    active_launches: Mutex<std::collections::HashSet<ProcessKey>>,
+}
+
+impl DaemonState {
+    pub(super) fn reserve_launch(&self, key: ProcessKey) -> Option<LaunchReservation<'_>> {
+        let mut active = self
+            .active_launches
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !active.insert(key.clone()) {
+            return None;
+        }
+        Some(LaunchReservation {
+            active_launches: &self.active_launches,
+            key,
+        })
+    }
+}
+
+pub(super) struct LaunchReservation<'a> {
+    active_launches: &'a Mutex<std::collections::HashSet<ProcessKey>>,
+    key: ProcessKey,
+}
+
+impl Drop for LaunchReservation<'_> {
+    fn drop(&mut self) {
+        self.active_launches
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&self.key);
+    }
 }
 
 pub async fn run(paths: StoragePaths) -> Result<bool, DaemonError> {
@@ -101,7 +132,10 @@ pub async fn run(paths: StoragePaths) -> Result<bool, DaemonError> {
     storage.paths().ensure_directories()?;
     let now = epoch_seconds();
     storage.reconcile(now, record_is_alive)?;
-    let state = Arc::new(DaemonState { storage });
+    let state = Arc::new(DaemonState {
+        storage,
+        active_launches: Mutex::new(std::collections::HashSet::new()),
+    });
 
     loop {
         let (stream, _) = listener.accept().await.map_err(|source| DaemonError::Io {

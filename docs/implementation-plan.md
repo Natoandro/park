@@ -123,6 +123,8 @@ Phase 5 implementation decisions:
 - Independent Tokio capture tasks append raw stdout and stderr bytes to their respective files. The child is waited independently so output draining cannot block termination monitoring.
 - A successful spawn records the PID, process-group ID, Linux process start time where available, and `running` state before returning success. Startup reconciliation requires the recorded Linux identity to match before treating a record as live. Spawn errors retain the pre-created record as `failed` with the diagnostic.
 - Natural exits become `exited` with an exit code; signal termination becomes `killed` with the signal number. The monitor checks for an existing terminal record before saving the terminal transition.
+- The daemon reserves each complete key through the launch transaction, so concurrent requests consistently receive a duplicate result. Key-derived logs without a matching record are stale pre-spawn artifacts and are recreated safely.
+- Capture and wait failures terminate the managed group, persist `failed` with the diagnostic, and retry terminal persistence with capped backoff until it succeeds.
 
 ## Phase 6: Inspection and Logs
 

@@ -195,6 +195,55 @@ fn rejects_duplicate_keys_and_retains_spawn_failures() {
 }
 
 #[test]
+fn concurrent_same_key_launches_return_one_success_and_duplicate_errors() {
+    let environment = TestEnvironment::new();
+    let root = environment.root.clone();
+    let clients = (0..4)
+        .map(|_| {
+            let root = root.clone();
+            thread::spawn(move || {
+                run_with_root(&root, &["contended", "--", "/bin/sh", "-c", "sleep 1"])
+            })
+        })
+        .collect::<Vec<_>>();
+    let outputs = clients
+        .into_iter()
+        .map(|client| client.join().expect("client thread should finish"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        outputs
+            .iter()
+            .filter(|output| output.status.success())
+            .count(),
+        1
+    );
+    assert_eq!(
+        outputs
+            .iter()
+            .filter(|output| output.status.code() == Some(4))
+            .count(),
+        3
+    );
+}
+
+#[test]
+fn stale_logs_without_a_record_do_not_block_a_later_launch() {
+    let environment = TestEnvironment::new();
+    let first = environment.run(&["stale", "--", "/bin/true"]);
+    assert!(first.status.success(), "stderr: {:?}", first.stderr);
+    assert_eq!(wait_for_state(&environment, "stale"), "exited");
+    let records_dir = environment.root.join("state/park/records");
+    for entry in fs::read_dir(records_dir).expect("records directory should be readable") {
+        let path = entry.expect("record entry should be readable").path();
+        fs::remove_file(path).expect("retained record should be removable for this test");
+    }
+
+    let second = environment.run(&["stale", "--", "/bin/true"]);
+    assert!(second.status.success(), "stderr: {:?}", second.stderr);
+}
+
+#[test]
 fn drains_large_output_without_blocking_the_child() {
     let environment = TestEnvironment::new();
     let launch = environment.run(&[
