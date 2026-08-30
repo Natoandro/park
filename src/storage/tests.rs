@@ -137,7 +137,7 @@ fn round_trips_exact_non_utf8_process_arguments() {
         logs,
     );
     record
-        .transition_to(ProcessState::Running)
+        .mark_running(11, 123, Some(123), None)
         .expect("record should become running");
     storage
         .create_record(&record)
@@ -165,7 +165,7 @@ fn atomically_persists_and_replaces_records() {
     ));
 
     record
-        .transition_to(ProcessState::Running)
+        .mark_running(11, 123, Some(123), None)
         .expect("record should become running");
     storage
         .save_record(&record)
@@ -202,10 +202,10 @@ fn retains_logs_and_rejects_removal_of_active_records() {
     ));
 
     record
-        .transition_to(ProcessState::Running)
+        .mark_running(11, 123, Some(123), None)
         .expect("record should become running");
     record
-        .transition_to(ProcessState::Exited)
+        .mark_terminated(12, Some(0), None)
         .expect("record should become terminal");
     storage
         .save_record(&record)
@@ -224,7 +224,7 @@ fn reconciles_dead_active_records_without_discarding_logs() {
     let (_root, storage, project) = test_storage();
     let mut record = record(&storage, &project, OsString::from("dev"));
     record
-        .transition_to(ProcessState::Running)
+        .mark_running(11, 123, Some(123), None)
         .expect("record should become running");
     let logs = record.logs().clone();
     storage
@@ -243,4 +243,55 @@ fn reconciles_dead_active_records_without_discarding_logs() {
     assert_eq!(loaded.exited_at(), Some(20));
     assert!(logs.stdout.exists());
     assert!(logs.stderr.exists());
+}
+
+#[test]
+fn rejects_a_record_with_external_log_paths_before_removal() {
+    let (root, storage, project) = test_storage();
+    let mut record = record(&storage, &project, OsString::from("dev"));
+    record
+        .mark_spawn_failed(11, "could not start")
+        .expect("record should become failed");
+    storage
+        .create_record(&record)
+        .expect("record should be created");
+    let external_log = root.path().join("outside.log");
+    fs::write(&external_log, b"must remain").expect("external log should exist");
+
+    let path = storage.record_path(record.key());
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).expect("record should be readable"))
+            .expect("record should be JSON");
+    value["logs"]["stdout"] = serde_json::json!(external_log);
+    fs::write(
+        &path,
+        serde_json::to_vec(&value).expect("record should serialize"),
+    )
+    .expect("corrupt record should write");
+
+    assert!(matches!(
+        storage.remove_record(record.key(), false),
+        Err(StorageError::InvalidRecordInvariant { .. })
+    ));
+    assert_eq!(
+        fs::read(&external_log).expect("external log should remain"),
+        b"must remain"
+    );
+}
+
+#[test]
+fn rejects_a_record_stored_under_an_unrelated_filename() {
+    let (_root, storage, project) = test_storage();
+    let record = record(&storage, &project, OsString::from("dev"));
+    storage
+        .create_record(&record)
+        .expect("record should be created");
+    let path = storage.record_path(record.key());
+    let unrelated = path.with_file_name("unrelated.json");
+    fs::rename(&path, &unrelated).expect("record should be renamed");
+
+    assert!(matches!(
+        storage.list_records(),
+        Err(StorageError::InvalidRecordInvariant { .. })
+    ));
 }

@@ -11,7 +11,7 @@ Persist one record per canonical `(project_path, name)` key. A record requires:
 - state, exit code, and termination signal
 - paths to stdout and stderr logs
 
-Use a separate human-readable command display only as derived presentation data. Process records must remain after exit so `status` and `logs` can report historical outcomes.
+Use a separate human-readable command display only as derived presentation data. Process records must remain after exit so `status` and `logs` can report historical outcomes. Every read validates lifecycle-field consistency, derived record/log locations, and working-directory/key consistency before the record can be listed, reconciled, or removed.
 
 ## Project Resolution
 
@@ -49,6 +49,6 @@ Log rotation and retention are future configuration features. Their implementati
 ## Failure Boundaries
 
 - On Linux, never trust a PID alone as proof that a record still owns a process. Reconciliation requires a matching `/proc` start time, process group, and session. Records without a verified identity are reconciled as no longer running.
-- Persist state changes atomically enough that a daemon crash cannot make an active process appear removable or a terminal process appear running indefinitely.
+- Persist state changes through synced temporary files, atomic link/rename, and parent-directory sync so a daemon or power failure cannot lose a reported record mutation. Retried exclusive temporary creation tolerates stale temporary files from a prior crash.
 - Treat a machine reboot as a reconciliation event, not an automatic restart request. Preserve the record and logs, then expose the process as no longer running.
 - Keep log readers and slow IPC clients from blocking child-output draining; otherwise a verbose command can deadlock on full pipes.

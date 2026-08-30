@@ -9,7 +9,9 @@ use super::StorageError;
 
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-pub(super) fn read_records(entries: ReadDir) -> Result<Vec<ProcessRecord>, StorageError> {
+pub(super) fn read_records(
+    entries: ReadDir,
+) -> Result<Vec<(PathBuf, ProcessRecord)>, StorageError> {
     let mut records = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|source| StorageError::Io {
@@ -21,7 +23,7 @@ pub(super) fn read_records(entries: ReadDir) -> Result<Vec<ProcessRecord>, Stora
         if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
             continue;
         }
-        records.push(read_record(&path)?);
+        records.push((path.clone(), read_record(&path)?));
     }
     Ok(records)
 }
@@ -63,6 +65,7 @@ pub(super) fn atomic_create(path: &Path, payload: &[u8]) -> Result<(), StorageEr
     match fs::hard_link(&temporary, path) {
         Ok(()) => {
             remove_if_present(&temporary)?;
+            sync_parent_directory(path)?;
             Ok(())
         }
         Err(source) if source.kind() == io::ErrorKind::AlreadyExists => {
@@ -91,23 +94,12 @@ pub(super) fn atomic_replace(path: &Path, payload: &[u8]) -> Result<(), StorageE
             path: path.to_path_buf(),
             source,
         }
-    })
+    })?;
+    sync_parent_directory(path)
 }
 
 fn write_temporary(path: &Path, payload: &[u8]) -> Result<PathBuf, StorageError> {
-    let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-    let temporary =
-        path.with_file_name(format!(".{file_name}.tmp-{}-{counter}", std::process::id()));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)
-        .map_err(|source| StorageError::Io {
-            operation: "create temporary record",
-            path: temporary.clone(),
-            source,
-        })?;
+    let (temporary, mut file) = create_temporary_file(path)?;
     file.write_all(payload).map_err(|source| StorageError::Io {
         operation: "write temporary record",
         path: temporary.clone(),
@@ -119,6 +111,56 @@ fn write_temporary(path: &Path, payload: &[u8]) -> Result<PathBuf, StorageError>
         source,
     })?;
     Ok(temporary)
+}
+
+fn create_temporary_file(path: &Path) -> Result<(PathBuf, File), StorageError> {
+    let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+    for _ in 0..64 {
+        let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let temporary =
+            path.with_file_name(format!(".{file_name}.tmp-{}-{counter}", std::process::id()));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => return Ok((temporary, file)),
+            Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(source) => {
+                return Err(StorageError::Io {
+                    operation: "create temporary record",
+                    path: temporary,
+                    source,
+                });
+            }
+        }
+    }
+    Err(StorageError::Io {
+        operation: "create temporary record",
+        path: path.to_path_buf(),
+        source: io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "could not allocate a unique temporary record path",
+        ),
+    })
+}
+
+fn sync_parent_directory(path: &Path) -> Result<(), StorageError> {
+    let parent = path.parent().ok_or_else(|| StorageError::Io {
+        operation: "find record parent directory",
+        path: path.to_path_buf(),
+        source: io::Error::new(
+            io::ErrorKind::NotFound,
+            "record path has no parent directory",
+        ),
+    })?;
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|source| StorageError::Io {
+            operation: "sync record parent directory",
+            path: parent.to_path_buf(),
+            source,
+        })
 }
 
 pub(super) fn remove_if_present(path: &Path) -> Result<(), StorageError> {

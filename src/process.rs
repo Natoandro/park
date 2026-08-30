@@ -2,6 +2,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use thiserror::Error;
 
 use crate::lifecycle::{InvalidStateTransition, ProcessState};
 use crate::project::ProjectPath;
@@ -147,6 +148,56 @@ impl ProcessRecord {
         &self.logs
     }
 
+    pub(crate) fn validate(&self) -> Result<(), ProcessRecordValidationError> {
+        if !self.key.project_path().is_absolute() {
+            return Err(ProcessRecordValidationError::ProjectPath);
+        }
+        if self.working_directory != self.key.project_path() {
+            return Err(ProcessRecordValidationError::WorkingDirectory);
+        }
+        if self.executable.is_empty() {
+            return Err(ProcessRecordValidationError::Executable);
+        }
+        if !timestamps_are_ordered(self.created_at, self.started_at, self.exited_at) {
+            return Err(ProcessRecordValidationError::Timestamps);
+        }
+        if !identifiers_are_valid(self.pid, self.process_group_id, self.process_start_time) {
+            return Err(ProcessRecordValidationError::Identifiers);
+        }
+        let active = matches!(self.state, ProcessState::Running | ProcessState::Stopping);
+        let terminal = self.state.is_terminal();
+        if active
+            && (self.pid.is_none() || self.process_group_id.is_none() || self.started_at.is_none())
+        {
+            return Err(ProcessRecordValidationError::ActiveFields);
+        }
+        if self.state == ProcessState::Starting
+            && (self.pid.is_some()
+                || self.process_group_id.is_some()
+                || self.process_start_time.is_some()
+                || self.started_at.is_some()
+                || self.exited_at.is_some()
+                || self.exit_code.is_some()
+                || self.termination_signal.is_some()
+                || self.failure_reason.is_some())
+        {
+            return Err(ProcessRecordValidationError::StartingFields);
+        }
+        if terminal && self.exited_at.is_none() {
+            return Err(ProcessRecordValidationError::TerminalTimestamp);
+        }
+        if self.state == ProcessState::Failed && self.failure_reason.is_none() {
+            return Err(ProcessRecordValidationError::FailureReason);
+        }
+        if self.state == ProcessState::Killed && self.termination_signal.is_none() {
+            return Err(ProcessRecordValidationError::TerminationSignal);
+        }
+        if self.state != ProcessState::Killed && self.termination_signal.is_some() {
+            return Err(ProcessRecordValidationError::UnexpectedTerminationSignal);
+        }
+        Ok(())
+    }
+
     pub fn transition_to(&mut self, next: ProcessState) -> Result<(), InvalidStateTransition> {
         self.state = self.state.transition_to(next)?;
         Ok(())
@@ -217,6 +268,58 @@ impl ProcessRecord {
         self.failure_reason = Some(reason.into());
         Ok(())
     }
+}
+
+fn timestamps_are_ordered(
+    created_at: EpochSeconds,
+    started_at: Option<EpochSeconds>,
+    exited_at: Option<EpochSeconds>,
+) -> bool {
+    started_at.is_none_or(|started_at| started_at >= created_at)
+        && exited_at.is_none_or(|exited_at| exited_at >= created_at)
+        && !matches!((started_at, exited_at), (Some(started_at), Some(exited_at)) if exited_at < started_at)
+}
+
+fn identifiers_are_valid(
+    pid: Option<u32>,
+    process_group_id: Option<u32>,
+    process_start_time: Option<u64>,
+) -> bool {
+    let valid_id = |id: u32| i32::try_from(id).is_ok_and(|id| id > 0);
+    pid.is_none_or(valid_id)
+        && process_group_id.is_none_or(valid_id)
+        && process_start_time.is_none_or(|start_time| start_time > 0)
+        && (pid.is_some() == process_group_id.is_some())
+}
+
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessRecordValidationError {
+    #[error("record file does not match the process key")]
+    RecordPath,
+    #[error("log paths do not match the process key")]
+    LogPaths,
+    #[error("project key is not an absolute path")]
+    ProjectPath,
+    #[error("working directory does not match the project key")]
+    WorkingDirectory,
+    #[error("executable is empty")]
+    Executable,
+    #[error("record timestamps are out of order")]
+    Timestamps,
+    #[error("record process identifiers are invalid")]
+    Identifiers,
+    #[error("active record is missing process identifiers or start time")]
+    ActiveFields,
+    #[error("starting record contains lifecycle fields")]
+    StartingFields,
+    #[error("terminal record is missing its exit timestamp")]
+    TerminalTimestamp,
+    #[error("failed record is missing its failure reason")]
+    FailureReason,
+    #[error("killed record is missing its termination signal")]
+    TerminationSignal,
+    #[error("non-killed record has a termination signal")]
+    UnexpectedTerminationSignal,
 }
 
 mod os_string_serde {

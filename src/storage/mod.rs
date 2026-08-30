@@ -7,7 +7,7 @@ use serde_json::Error as JsonError;
 use thiserror::Error;
 
 use crate::lifecycle::{InvalidStateTransition, ProcessState};
-use crate::process::{LogPaths, ProcessKey, ProcessRecord};
+use crate::process::{LogPaths, ProcessKey, ProcessRecord, ProcessRecordValidationError};
 
 mod files;
 
@@ -154,6 +154,7 @@ impl Storage {
     pub fn create_record(&self, record: &ProcessRecord) -> Result<(), StorageError> {
         self.paths.ensure_directories()?;
         let path = self.record_path(record.key());
+        self.validate_record(record, &path)?;
         if path.exists() {
             return Err(StorageError::RecordExists { path });
         }
@@ -164,6 +165,7 @@ impl Storage {
     pub fn save_record(&self, record: &ProcessRecord) -> Result<(), StorageError> {
         self.paths.ensure_directories()?;
         let path = self.record_path(record.key());
+        self.validate_record(record, &path)?;
         if !path.exists() {
             return Err(StorageError::RecordMissing { path });
         }
@@ -176,7 +178,9 @@ impl Storage {
         if !path.exists() {
             return Ok(None);
         }
-        files::read_record(&path).map(Some)
+        let record = files::read_record(&path)?;
+        self.validate_record(&record, &path)?;
+        Ok(Some(record))
     }
 
     pub fn list_records(&self) -> Result<Vec<ProcessRecord>, StorageError> {
@@ -191,7 +195,35 @@ impl Storage {
                 });
             }
         };
-        files::read_records(entries)
+        files::read_records(entries)?
+            .into_iter()
+            .map(|(path, record)| {
+                self.validate_record(&record, &path)?;
+                Ok(record)
+            })
+            .collect()
+    }
+
+    fn validate_record(&self, record: &ProcessRecord, path: &Path) -> Result<(), StorageError> {
+        record
+            .validate()
+            .map_err(|source| StorageError::InvalidRecordInvariant {
+                path: path.to_path_buf(),
+                source,
+            })?;
+        if path != self.record_path(record.key()) {
+            return Err(StorageError::InvalidRecordInvariant {
+                path: path.to_path_buf(),
+                source: ProcessRecordValidationError::RecordPath,
+            });
+        }
+        if record.logs() != &self.log_paths(record.key()) {
+            return Err(StorageError::InvalidRecordInvariant {
+                path: path.to_path_buf(),
+                source: ProcessRecordValidationError::LogPaths,
+            });
+        }
+        Ok(())
     }
 
     pub fn remove_record(&self, key: &ProcessKey, keep_logs: bool) -> Result<(), StorageError> {
@@ -257,6 +289,11 @@ pub enum StorageError {
     ActiveRecord { path: PathBuf },
     #[error("invalid record at {path:?}: {source}")]
     InvalidRecord { path: PathBuf, source: JsonError },
+    #[error("invalid record at {path:?}: {source}")]
+    InvalidRecordInvariant {
+        path: PathBuf,
+        source: ProcessRecordValidationError,
+    },
     #[error("could not serialize record: {0}")]
     Json(#[from] JsonError),
     #[error("could not reconcile record state: {0}")]

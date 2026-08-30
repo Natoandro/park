@@ -78,7 +78,8 @@ Phase 3 implementation decisions:
 
 - Durable state uses `$XDG_STATE_HOME/park`, falling back to `$HOME/.local/state/park`. Runtime state uses `$XDG_RUNTIME_DIR/park`, falling back to a private `runtime/park` directory under the durable state directory.
 - Records and logs are stored under separate `records` and `logs` directories. Filenames use a deterministic digest of the canonical project path and opaque name rather than exposing either value as a path component.
-- New records use an atomically linked completed temporary file; updates use a synced temporary file followed by atomic replacement. Temporary files are ignored during record discovery.
+- New records use an atomically linked completed temporary file; updates use a synced temporary file followed by atomic replacement. The records directory is synced after link/rename, and exclusive temporary creation retries collision-resistant names so stale files from a prior process do not block updates. Temporary files are ignored during record discovery.
+- Every record load validates lifecycle fields, working-directory/key consistency, the expected record filename, and derived log paths before it is listed, reconciled, or removed.
 - Log files are created independently with exclusive creation before a record is persisted. Terminal records and logs remain until explicit removal.
 - Reconciliation accepts an injected liveness check so platform-specific PID and process-group ownership checks can be added with the daemon in later phases.
 
