@@ -1,0 +1,263 @@
+use std::ffi::OsString;
+use std::io;
+use std::path::PathBuf;
+
+use nix::sys::signal::{Signal, killpg};
+use nix::unistd::Pid;
+use tokio::fs::OpenOptions;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::process::{Child, ChildStderr, ChildStdout, Command};
+
+use crate::ipc::{IpcResponse, record_value};
+use crate::process::{ProcessKey, ProcessRecord};
+use crate::project::ProjectPath;
+use crate::result::ResultStatus;
+
+use super::{DaemonState, epoch_seconds};
+
+pub(super) async fn start(
+    state: &DaemonState,
+    request_id: u64,
+    project_path: ProjectPath,
+    name: OsString,
+    command: Vec<OsString>,
+) -> IpcResponse {
+    let key = ProcessKey::new(project_path.clone(), name);
+    match state.storage.load_record(&key) {
+        Ok(Some(_)) => {
+            return IpcResponse::error(
+                request_id,
+                ResultStatus::DuplicateRecord,
+                "a process with this name already exists in the project",
+            );
+        }
+        Ok(None) => {}
+        Err(error) => return storage_failure(request_id, error.to_string()),
+    }
+
+    let mut command_parts = command.into_iter();
+    let Some(executable) = command_parts.next() else {
+        return IpcResponse::error(request_id, ResultStatus::Failure, "launch command is empty");
+    };
+    let arguments = command_parts.collect::<Vec<_>>();
+    let logs = match state.storage.create_logs(&key) {
+        Ok(logs) => logs,
+        Err(error) => return storage_failure(request_id, error.to_string()),
+    };
+    let working_directory = project_path.as_path().to_path_buf();
+    let mut record = ProcessRecord::new(
+        key.clone(),
+        working_directory.clone(),
+        executable.clone(),
+        arguments.clone(),
+        epoch_seconds(),
+        logs,
+    );
+    if let Err(error) = state.storage.create_record(&record) {
+        return storage_failure(request_id, error.to_string());
+    }
+
+    let mut child = match spawn_child(&working_directory, &executable, &arguments) {
+        Ok(child) => child,
+        Err(error) => {
+            return persist_start_failure(
+                &state.storage,
+                request_id,
+                &mut record,
+                format!("could not spawn command: {error}"),
+            );
+        }
+    };
+    let Some(pid) = child.id() else {
+        let _ = child.kill().await;
+        return persist_start_failure(
+            &state.storage,
+            request_id,
+            &mut record,
+            "spawned child did not provide a process ID",
+        );
+    };
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            return fail_after_spawn(
+                &state.storage,
+                request_id,
+                &mut child,
+                &mut record,
+                "child stdout pipe was unavailable",
+            )
+            .await;
+        }
+    };
+    let stderr = match child.stderr.take() {
+        Some(stderr) => stderr,
+        None => {
+            return fail_after_spawn(
+                &state.storage,
+                request_id,
+                &mut child,
+                &mut record,
+                "child stderr pipe was unavailable",
+            )
+            .await;
+        }
+    };
+    if let Err(error) = record.mark_running(epoch_seconds(), pid, Some(pid)) {
+        let _ = child.kill().await;
+        return persist_start_failure(
+            &state.storage,
+            request_id,
+            &mut record,
+            format!("could not mark process running: {error}"),
+        );
+    }
+    if let Err(error) = state.storage.save_record(&record) {
+        let _ = kill_process_group(pid);
+        let _ = child.kill().await;
+        let reason = format!("could not persist running process: {error}");
+        let _ = record.mark_spawn_failed(epoch_seconds(), reason.clone());
+        let _ = state.storage.save_record(&record);
+        return IpcResponse::error(request_id, ResultStatus::Failure, reason);
+    }
+
+    let response = match record_value(&record) {
+        Ok(value) => IpcResponse::success(request_id, Some(value)),
+        Err(error) => IpcResponse::error(request_id, ResultStatus::Failure, error.to_string()),
+    };
+    let storage = state.storage.clone();
+    tokio::spawn(async move {
+        monitor_child(storage, key, child, stdout, stderr).await;
+    });
+    response
+}
+
+fn spawn_child(
+    working_directory: &PathBuf,
+    executable: &OsString,
+    arguments: &[OsString],
+) -> io::Result<Child> {
+    let mut command = Command::new(executable);
+    command
+        .args(arguments)
+        .current_dir(working_directory)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+
+        // The child becomes the leader of its own session and process group.
+        unsafe {
+            command
+                .as_std_mut()
+                .pre_exec(|| nix::unistd::setsid().map(|_| ()).map_err(io::Error::other));
+        }
+    }
+    command.spawn()
+}
+
+async fn fail_after_spawn(
+    storage: &crate::storage::Storage,
+    request_id: u64,
+    child: &mut Child,
+    record: &mut ProcessRecord,
+    reason: &str,
+) -> IpcResponse {
+    if let Some(pid) = child.id() {
+        let _ = kill_process_group(pid);
+    }
+    let _ = child.kill().await;
+    persist_start_failure(storage, request_id, record, reason)
+}
+
+fn persist_start_failure(
+    storage: &crate::storage::Storage,
+    request_id: u64,
+    record: &mut ProcessRecord,
+    reason: impl Into<String>,
+) -> IpcResponse {
+    let reason = reason.into();
+    let result = match record.mark_spawn_failed(epoch_seconds(), reason.clone()) {
+        Ok(()) => storage
+            .save_record(record)
+            .map_err(|error| error.to_string()),
+        Err(error) => Err(error.to_string()),
+    };
+    match result {
+        Ok(()) => IpcResponse::error(request_id, ResultStatus::Failure, reason),
+        Err(error) => IpcResponse::error(
+            request_id,
+            ResultStatus::Failure,
+            format!("{reason}; could not persist failed record: {error}"),
+        ),
+    }
+}
+
+async fn monitor_child(
+    storage: crate::storage::Storage,
+    key: ProcessKey,
+    mut child: Child,
+    stdout: ChildStdout,
+    stderr: ChildStderr,
+) {
+    let stdout_task = tokio::spawn(capture_output(stdout, storage_path(&storage, &key, true)));
+    let stderr_task = tokio::spawn(capture_output(stderr, storage_path(&storage, &key, false)));
+    let status = child.wait().await;
+    let _ = stdout_task.await;
+    let _ = stderr_task.await;
+
+    let Ok(status) = status else {
+        return;
+    };
+    let Ok(Some(mut record)) = storage.load_record(&key) else {
+        return;
+    };
+    if record.state().is_terminal() {
+        return;
+    }
+    let termination_signal = exit_signal(&status);
+    let _ = record.mark_terminated(epoch_seconds(), status.code(), termination_signal);
+    let _ = storage.save_record(&record);
+}
+
+fn storage_path(storage: &crate::storage::Storage, key: &ProcessKey, stdout: bool) -> PathBuf {
+    let logs = storage.log_paths(key);
+    if stdout { logs.stdout } else { logs.stderr }
+}
+
+async fn capture_output<R>(mut reader: R, path: PathBuf) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut file = OpenOptions::new().append(true).open(path).await?;
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let count = reader.read(&mut buffer).await?;
+        if count == 0 {
+            return Ok(());
+        }
+        file.write_all(&buffer[..count]).await?;
+    }
+}
+
+#[cfg(unix)]
+fn exit_signal(status: &std::process::ExitStatus) -> Option<i32> {
+    use std::os::unix::process::ExitStatusExt;
+    status.signal()
+}
+
+#[cfg(not(unix))]
+fn exit_signal(_status: &std::process::ExitStatus) -> Option<i32> {
+    None
+}
+
+fn kill_process_group(pid: u32) -> nix::Result<()> {
+    killpg(Pid::from_raw(pid as i32), Signal::SIGKILL)
+}
+
+fn storage_failure(request_id: u64, message: String) -> IpcResponse {
+    IpcResponse::error(request_id, ResultStatus::Failure, message)
+}

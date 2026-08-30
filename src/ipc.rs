@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -24,8 +25,19 @@ pub struct IpcRequest {
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum IpcOperation {
     Ping,
-    Ps { project_path: ProjectPath },
-    Status { key: ProcessKey },
+    Launch {
+        project_path: ProjectPath,
+        #[serde(with = "os_string_serde")]
+        name: OsString,
+        #[serde(with = "os_string_vec_serde")]
+        command: Vec<OsString>,
+    },
+    Ps {
+        project_path: ProjectPath,
+    },
+    Status {
+        key: ProcessKey,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -149,6 +161,23 @@ pub fn request_for_ps(request_id: u64, project_path: ProjectPath) -> IpcRequest 
     }
 }
 
+pub fn request_for_launch(
+    request_id: u64,
+    project_path: ProjectPath,
+    name: OsString,
+    command: Vec<OsString>,
+) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Launch {
+            project_path,
+            name,
+            command,
+        },
+    }
+}
+
 pub fn request_for_status(request_id: u64, key: ProcessKey) -> IpcRequest {
     IpcRequest {
         version: PROTOCOL_VERSION,
@@ -176,6 +205,79 @@ pub enum IpcError {
     Protocol(String),
 }
 
+mod os_string_serde {
+    use super::*;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+    pub fn serialize<S>(value: &OsString, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&encode_hex(value.as_bytes()))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<OsString, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        decode_hex(&value)
+            .map(OsString::from_vec)
+            .map_err(serde::de::Error::custom)
+    }
+
+    pub(super) fn encode_hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    pub(super) fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
+        if value.len() % 2 != 0 {
+            return Err("encoded OS string has odd length".to_owned());
+        }
+        (0..value.len())
+            .step_by(2)
+            .map(|index| {
+                u8::from_str_radix(&value[index..index + 2], 16)
+                    .map_err(|_| "invalid hexadecimal OS string".to_owned())
+            })
+            .collect()
+    }
+}
+
+mod os_string_vec_serde {
+    use super::*;
+
+    pub fn serialize<S>(values: &[OsString], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        values
+            .iter()
+            .map(|value| {
+                use std::os::unix::ffi::OsStrExt;
+                os_string_serde::encode_hex(value.as_bytes())
+            })
+            .collect::<Vec<_>>()
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<OsString>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let values = Vec::<String>::deserialize(deserializer)?;
+        values
+            .into_iter()
+            .map(|value| {
+                use std::os::unix::ffi::OsStringExt;
+                os_string_serde::decode_hex(&value)
+                    .map(OsString::from_vec)
+                    .map_err(serde::de::Error::custom)
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +301,21 @@ mod tests {
             serde_json::to_string(&response).expect("response should serialize"),
             r#"{"version":1,"request_id":3,"result":{"status":"missing_record","ok":false,"error":{"code":"missing_record","message":"not found"}}}"#
         );
+    }
+
+    #[test]
+    fn serializes_exact_launch_arguments() {
+        let request = request_for_launch(
+            8,
+            ProjectPath::from_canonical("/project".into()),
+            OsString::from("dev"),
+            vec![OsString::from("server"), OsString::from("--dev")],
+        );
+        let decoded: IpcRequest = serde_json::from_value(
+            serde_json::to_value(request).expect("request should serialize"),
+        )
+        .expect("request should deserialize");
+        assert_eq!(decoded.request_id, 8);
+        assert!(matches!(decoded.operation, IpcOperation::Launch { .. }));
     }
 }

@@ -19,6 +19,8 @@ use crate::process::ProcessRecord;
 use crate::result::ResultStatus;
 use crate::storage::{Storage, StorageError, StoragePaths};
 
+mod launch;
+
 pub const INTERNAL_DAEMON_ARGUMENT: &str = "--internal-daemon";
 
 #[derive(Debug)]
@@ -86,8 +88,8 @@ impl Drop for DaemonLock {
 }
 
 #[derive(Clone)]
-struct DaemonState {
-    storage: Storage,
+pub(super) struct DaemonState {
+    pub(super) storage: Storage,
 }
 
 pub async fn run(paths: StoragePaths) -> Result<bool, DaemonError> {
@@ -122,8 +124,35 @@ async fn serve_connection(mut stream: UnixStream, state: Arc<DaemonState>) -> Re
             return write_response(&mut stream, &response).await;
         }
     };
-    let response = handle_request(&state.storage, request);
+    let response = dispatch_request(&state, request).await;
     write_response(&mut stream, &response).await
+}
+
+async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> IpcResponse {
+    if request.version != PROTOCOL_VERSION {
+        return IpcResponse::error(
+            request.request_id,
+            ResultStatus::Failure,
+            format!("unsupported IPC protocol version {}", request.version),
+        );
+    }
+
+    let request_id = request.request_id;
+    match request.operation {
+        IpcOperation::Launch {
+            project_path,
+            name,
+            command,
+        } => launch::start(state, request_id, project_path, name, command).await,
+        operation => handle_request(
+            &state.storage,
+            IpcRequest {
+                version: PROTOCOL_VERSION,
+                request_id,
+                operation,
+            },
+        ),
+    }
 }
 
 fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
@@ -137,6 +166,11 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
 
     match request.operation {
         IpcOperation::Ping => IpcResponse::success(request.request_id, None),
+        IpcOperation::Launch { .. } => IpcResponse::error(
+            request.request_id,
+            ResultStatus::Failure,
+            "launch requests require the daemon dispatcher",
+        ),
         IpcOperation::Ps { project_path } => {
             let records = match storage.list_records() {
                 Ok(records) => records

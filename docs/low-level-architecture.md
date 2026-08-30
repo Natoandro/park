@@ -25,7 +25,7 @@ Use versioned, newline-delimited JSON request/response messages with an operatio
 
 ## Spawn and Monitoring
 
-1. Validate the canonical key is absent or an explicit replacement path was requested.
+1. Validate the canonical key is absent; explicit replacement is deferred until lifecycle semantics are complete.
 2. Create durable record and log destinations before spawning.
 3. Spawn directly from the executable and argument vector in the recorded working directory.
 4. Create a new process group/session on supported Unix platforms.

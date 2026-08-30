@@ -145,6 +145,48 @@ impl ProcessRecord {
         Ok(())
     }
 
+    pub fn mark_running(
+        &mut self,
+        started_at: EpochSeconds,
+        pid: u32,
+        process_group_id: Option<u32>,
+    ) -> Result<(), InvalidStateTransition> {
+        self.transition_to(ProcessState::Running)?;
+        self.pid = Some(pid);
+        self.process_group_id = process_group_id;
+        self.started_at = Some(started_at);
+        Ok(())
+    }
+
+    pub fn mark_spawn_failed(
+        &mut self,
+        exited_at: EpochSeconds,
+        reason: impl Into<String>,
+    ) -> Result<(), InvalidStateTransition> {
+        self.transition_to(ProcessState::Failed)?;
+        self.exited_at = Some(exited_at);
+        self.failure_reason = Some(reason.into());
+        Ok(())
+    }
+
+    pub fn mark_terminated(
+        &mut self,
+        exited_at: EpochSeconds,
+        exit_code: Option<i32>,
+        termination_signal: Option<i32>,
+    ) -> Result<(), InvalidStateTransition> {
+        let state = if termination_signal.is_some() {
+            ProcessState::Killed
+        } else {
+            ProcessState::Exited
+        };
+        self.transition_to(state)?;
+        self.exited_at = Some(exited_at);
+        self.exit_code = exit_code;
+        self.termination_signal = termination_signal;
+        Ok(())
+    }
+
     pub fn reconcile_as_exited(
         &mut self,
         exited_at: EpochSeconds,

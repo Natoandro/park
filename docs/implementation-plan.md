@@ -104,16 +104,24 @@ Phase 4 implementation decisions:
 
 ## Phase 5: Spawn, Capture, and Monitoring
 
-- [ ] Validate duplicate process keys before launch; reject by default.
-- [ ] Implement explicit replacement only after the lifecycle semantics are complete.
-- [ ] Spawn from the stored executable and argument vector without invoking a shell implicitly.
-- [ ] Spawn in the stored working directory with a detached session/process group on supported Unix systems.
-- [ ] Drain stdout and stderr independently so high output cannot block the child process.
-- [ ] Append captured bytes to their respective durable log files.
-- [ ] Persist `running` only after spawn succeeds.
-- [ ] Retain a `failed` record with a useful diagnostic when spawning fails.
-- [ ] Monitor child termination and persist its exit code or termination signal exactly once.
-- [ ] Test commands that exit successfully, fail, emit interleaved stdout/stderr, emit large output, and spawn children.
+- [x] Validate duplicate process keys before launch; reject by default.
+- [x] Implement explicit replacement only after the lifecycle semantics are complete.
+- [x] Spawn from the stored executable and argument vector without invoking a shell implicitly.
+- [x] Spawn in the stored working directory with a detached session/process group on supported Unix systems.
+- [x] Drain stdout and stderr independently so high output cannot block the child process.
+- [x] Append captured bytes to their respective durable log files.
+- [x] Persist `running` only after spawn succeeds.
+- [x] Retain a `failed` record with a useful diagnostic when spawning fails.
+- [x] Monitor child termination and persist its exit code or termination signal exactly once.
+- [x] Test commands that exit successfully, fail, emit interleaved stdout/stderr, emit large output, and spawn children.
+
+Phase 5 implementation decisions:
+
+- Launch requests carry the canonical project path, opaque name, and exact OS argument vector over IPC. The daemon rejects any existing record for the complete key, including retained terminal records.
+- The daemon creates both log files and persists a `starting` record before spawning. It uses Tokio's process API directly, sets the working directory, and calls `setsid` in the child pre-exec hook to establish a dedicated process group.
+- Independent Tokio capture tasks append raw stdout and stderr bytes to their respective files. The child is waited independently so output draining cannot block termination monitoring.
+- A successful spawn records the PID, process-group ID, and `running` state before returning success. Spawn errors retain the pre-created record as `failed` with the diagnostic.
+- Natural exits become `exited` with an exit code; signal termination becomes `killed` with the signal number. The monitor checks for an existing terminal record before saving the terminal transition.
 
 ## Phase 6: Inspection and Logs
 

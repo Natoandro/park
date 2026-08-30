@@ -2,8 +2,8 @@ use std::{env, process};
 
 use park_cli::{
     CommandResult, INTERNAL_DAEMON_ARGUMENT, Invocation, Operation, ResultStatus, StoragePaths,
-    parse_invocation, render_json, request_for_ps, request_for_status, request_with_daemon_start,
-    resolve_current_project, run_daemon,
+    parse_invocation, render_json, request_for_launch, request_for_ps, request_for_status,
+    request_with_daemon_start, resolve_current_project, run_daemon,
 };
 use serde_json::Value;
 
@@ -62,16 +62,6 @@ fn main() {
 }
 
 async fn execute(invocation: Invocation) -> CommandResult<Value> {
-    let operation = match invocation {
-        Invocation::Operation(operation) => operation,
-        Invocation::Launch { .. } => {
-            return CommandResult::error(
-                ResultStatus::Failure,
-                "launching processes is not implemented yet",
-            );
-        }
-    };
-
     let paths = match StoragePaths::from_process_environment() {
         Ok(paths) => paths,
         Err(error) => return CommandResult::error(ResultStatus::Failure, error.to_string()),
@@ -81,12 +71,13 @@ async fn execute(invocation: Invocation) -> CommandResult<Value> {
         Err(error) => return CommandResult::error(ResultStatus::Failure, error.to_string()),
     };
 
-    let request = match operation {
-        Operation::Ps { .. } => request_for_ps(1, project),
-        Operation::Status { name, .. } => {
+    let request = match invocation {
+        Invocation::Launch { name, command } => request_for_launch(1, project, name, command),
+        Invocation::Operation(Operation::Ps { .. }) => request_for_ps(1, project),
+        Invocation::Operation(Operation::Status { name, .. }) => {
             request_for_status(1, park_cli::ProcessKey::new(project, name))
         }
-        other => {
+        Invocation::Operation(other) => {
             return CommandResult::error(
                 ResultStatus::Failure,
                 format!("operation {other:?} is not implemented yet"),

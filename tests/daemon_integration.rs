@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
+use serde_json::Value;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -143,4 +144,94 @@ fn status_returns_the_missing_record_exit_code() {
     let output = environment.run(&["status", "dev", "--json"]);
     assert_eq!(output.status.code(), Some(3), "stderr: {:?}", output.stderr);
     assert!(String::from_utf8_lossy(&output.stdout).contains("missing_record"));
+}
+
+#[test]
+fn launches_captures_both_streams_and_retains_the_terminal_record() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&[
+        "streams",
+        "--",
+        "/bin/sh",
+        "-c",
+        "printf stdout; printf stderr >&2",
+    ]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    let launched: Value =
+        serde_json::from_slice(&launch.stdout).expect("launch data should be JSON");
+    let stdout_path = launched["logs"]["stdout"]
+        .as_str()
+        .expect("stdout path should be returned");
+    let stderr_path = launched["logs"]["stderr"]
+        .as_str()
+        .expect("stderr path should be returned");
+    assert_eq!(wait_for_state(&environment, "streams"), "exited");
+    assert_eq!(
+        fs::read_to_string(stdout_path).expect("stdout log should be readable"),
+        "stdout"
+    );
+    assert_eq!(
+        fs::read_to_string(stderr_path).expect("stderr log should be readable"),
+        "stderr"
+    );
+}
+
+#[test]
+fn rejects_duplicate_keys_and_retains_spawn_failures() {
+    let environment = TestEnvironment::new();
+    let first = environment.run(&["duplicate", "--", "/bin/true"]);
+    assert!(first.status.success(), "stderr: {:?}", first.stderr);
+    let duplicate = environment.run(&["duplicate", "--", "/bin/true"]);
+    assert_eq!(
+        duplicate.status.code(),
+        Some(4),
+        "stderr: {:?}",
+        duplicate.stderr
+    );
+
+    let failed = environment.run(&["failed", "--", "/park/command/does-not-exist"]);
+    assert_eq!(failed.status.code(), Some(1), "stderr: {:?}", failed.stderr);
+    assert_eq!(wait_for_state(&environment, "failed"), "failed");
+}
+
+#[test]
+fn drains_large_output_without_blocking_the_child() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&[
+        "large-output",
+        "--",
+        "/bin/sh",
+        "-c",
+        "head -c 200000 /dev/zero",
+    ]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    let launched: Value =
+        serde_json::from_slice(&launch.stdout).expect("launch data should be JSON");
+    let stdout_path = launched["logs"]["stdout"]
+        .as_str()
+        .expect("stdout path should be returned");
+    assert_eq!(wait_for_state(&environment, "large-output"), "exited");
+    assert_eq!(
+        fs::metadata(stdout_path)
+            .expect("stdout log should exist")
+            .len(),
+        200_000
+    );
+}
+
+fn wait_for_state(environment: &TestEnvironment, name: &str) -> String {
+    for _ in 0..80 {
+        let output = environment.run(&["status", name, "--json"]);
+        if output.status.success() {
+            let response: Value =
+                serde_json::from_slice(&output.stdout).expect("status should be JSON");
+            if let Some(state) = response["data"]["state"].as_str() {
+                if state == "exited" || state == "failed" {
+                    return state.to_owned();
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    panic!("process did not reach a terminal state");
 }
