@@ -38,7 +38,7 @@ start request -> starting -> running -> stopping -> exited | failed | killed
 
 Starting records the exact executable arguments and working directory before returning success. A name collision in the same project is an error unless the user explicitly chooses replacement behavior. Restart uses the recorded command, not a shell reconstruction.
 
-Stopping is graceful by default: signal the managed process group, wait for a configured timeout, then escalate to forceful termination when necessary. Group signaling avoids orphaned children from wrappers such as `npm`, `pnpm`, and `cargo watch`.
+Stopping is graceful by default: send SIGTERM to the managed process group, wait two seconds, then escalate to SIGKILL when necessary. `--force` skips the grace period. Group signaling avoids orphaned children from wrappers such as `npm`, `pnpm`, and `cargo watch`.
 
 ## Public Behavior
 
@@ -46,6 +46,7 @@ Stopping is graceful by default: signal the managed process group, wait for a co
 - `ps`, `status`, and lifecycle commands resolve only within the current project's canonical path.
 - Logs stay available after a command exits. Standard output and standard error are retained independently and can also be presented together in deterministic stdout-then-stderr order.
 - `--json` is a first-class output mode for process inspection and should use documented, stable fields.
+- `restart` reuses the recorded command, `start` is limited to retained terminal records, and `rm`/`clean` never remove an active process or its remaining process group.
 - Commands must be non-interactive unless explicitly requested. Stable exit semantics distinguish normal failure, missing records, duplicate records, and invalid transitions.
 
 ## Non-Goals

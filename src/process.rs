@@ -218,6 +218,21 @@ impl ProcessRecord {
         Ok(())
     }
 
+    pub fn reset_for_start(&mut self) -> Result<(), crate::lifecycle::InvalidLifecycleAction> {
+        self.state
+            .validate_action(crate::lifecycle::LifecycleAction::Start)?;
+        self.pid = None;
+        self.process_group_id = None;
+        self.process_start_time = None;
+        self.started_at = None;
+        self.exited_at = None;
+        self.state = ProcessState::Starting;
+        self.exit_code = None;
+        self.termination_signal = None;
+        self.failure_reason = None;
+        Ok(())
+    }
+
     pub fn mark_spawn_failed(
         &mut self,
         exited_at: EpochSeconds,

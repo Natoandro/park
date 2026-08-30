@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
@@ -21,6 +21,8 @@ pub(super) async fn start(
     command: Vec<OsString>,
 ) -> IpcResponse {
     let key = ProcessKey::new(project_path.clone(), name);
+    let lifecycle_lock = state.lifecycle_lock(&key);
+    let _lifecycle_guard = lifecycle_lock.lock().await;
     let Some(_reservation) = state.reserve_launch(key.clone()) else {
         return duplicate_response(request_id);
     };
@@ -45,7 +47,7 @@ pub(super) async fn start(
         }
     };
     let working_directory = project_path.as_path().to_path_buf();
-    let mut record = ProcessRecord::new(
+    let record = ProcessRecord::new(
         key.clone(),
         working_directory.clone(),
         executable.clone(),
@@ -61,9 +63,22 @@ pub(super) async fn start(
         return storage_failure(request_id, error.to_string());
     }
 
-    let mut child = match validate_executable(&executable)
-        .and_then(|_| spawn_child(&working_directory, &executable, &arguments))
-    {
+    spawn_record(state, request_id, record).await
+}
+
+pub(super) async fn spawn_record(
+    state: &DaemonState,
+    request_id: u64,
+    mut record: ProcessRecord,
+) -> IpcResponse {
+    let key = record.key().clone();
+    let mut child = match validate_executable(record.executable()).and_then(|_| {
+        spawn_child(
+            record.working_directory(),
+            record.executable(),
+            record.arguments(),
+        )
+    }) {
         Ok(child) => child,
         Err(error) => {
             return persist_start_failure(
@@ -192,7 +207,7 @@ fn create_logs_for_launch(
     }
 }
 
-fn validate_executable(executable: &OsString) -> io::Result<()> {
+fn validate_executable(executable: &std::ffi::OsStr) -> io::Result<()> {
     let path = Path::new(executable);
     if path.components().count() > 1 {
         return validate_executable_path(path);
@@ -231,8 +246,8 @@ fn validate_executable_path(path: &Path) -> io::Result<()> {
 }
 
 fn spawn_child(
-    working_directory: &PathBuf,
-    executable: &OsString,
+    working_directory: &Path,
+    executable: &std::ffi::OsStr,
     arguments: &[OsString],
 ) -> io::Result<Child> {
     #[cfg(target_os = "linux")]

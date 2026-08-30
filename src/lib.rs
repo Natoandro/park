@@ -15,8 +15,9 @@ pub use daemon::{
     DaemonError, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, run as run_daemon,
 };
 pub use ipc::{
-    IpcError, IpcLogOptions, IpcOperation, IpcRequest, IpcResponse, request_for_launch,
-    request_for_logs, request_for_ps, request_for_status,
+    IpcError, IpcLogOptions, IpcOperation, IpcRequest, IpcResponse, request_for_clean,
+    request_for_launch, request_for_logs, request_for_ps, request_for_remove, request_for_restart,
+    request_for_signal, request_for_start, request_for_status, request_for_stop,
 };
 pub use lifecycle::{
     InvalidLifecycleAction, InvalidStateTransition, LifecycleAction, ProcessState,

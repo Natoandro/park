@@ -47,18 +47,23 @@ pub(super) async fn monitor_child(
         stderr_result = Some(capture_failure_reason("stderr", stderr_task.await));
     }
     if let Err(reason) = stdout_result.expect("stdout result should be set") {
-        persist_monitor_failure(&storage, &key, reason).await;
+        persist_monitor_failure(&storage, &key, pid, reason).await;
         return;
     }
     if let Err(reason) = stderr_result.expect("stderr result should be set") {
-        persist_monitor_failure(&storage, &key, reason).await;
+        persist_monitor_failure(&storage, &key, pid, reason).await;
         return;
     }
     match status {
-        Ok(status) => persist_termination(&storage, &key, status).await,
+        Ok(status) => persist_termination(&storage, &key, pid, status).await,
         Err(error) => {
-            persist_monitor_failure(&storage, &key, format!("could not wait for child: {error}"))
-                .await;
+            persist_monitor_failure(
+                &storage,
+                &key,
+                pid,
+                format!("could not wait for child: {error}"),
+            )
+            .await;
         }
     }
 }
@@ -75,7 +80,7 @@ async fn fail_monitor(
     }
     let _ = child.kill().await;
     let _ = child.wait().await;
-    persist_monitor_failure(storage, key, reason).await;
+    persist_monitor_failure(storage, key, pid, reason).await;
 }
 
 fn capture_failure_reason(
@@ -90,22 +95,18 @@ fn capture_failure_reason(
 async fn persist_termination(
     storage: &crate::storage::Storage,
     key: &ProcessKey,
+    pid: Option<u32>,
     status: std::process::ExitStatus,
 ) {
     let Ok(Some(mut record)) = storage.load_record(key) else {
         return;
     };
-    if record.state().is_terminal() {
+    if record.state().is_terminal() || record.pid() != pid {
         return;
     }
     let termination_signal = exit_signal(&status);
     if let Err(error) = record.mark_terminated(epoch_seconds(), status.code(), termination_signal) {
-        persist_monitor_failure(
-            storage,
-            key,
-            format!("could not record child termination: {error}"),
-        )
-        .await;
+        eprintln!("park daemon could not record child termination for {key:?}: {error}");
         return;
     }
     save_monitor_record(storage, key, &record).await;
@@ -114,6 +115,7 @@ async fn persist_termination(
 async fn persist_monitor_failure(
     storage: &crate::storage::Storage,
     key: &ProcessKey,
+    pid: Option<u32>,
     reason: String,
 ) {
     let record = match storage.load_record(key) {
@@ -124,7 +126,7 @@ async fn persist_monitor_failure(
             return;
         }
     };
-    if record.state().is_terminal() {
+    if record.state().is_terminal() || record.pid() != pid {
         return;
     }
     let mut record = record;
@@ -261,6 +263,7 @@ mod tests {
         runtime.block_on(persist_monitor_failure(
             &storage,
             &key,
+            Some(123),
             "could not capture stdout: disk full".to_owned(),
         ));
 

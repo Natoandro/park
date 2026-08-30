@@ -334,6 +334,140 @@ fn reads_empty_retained_logs_successfully() {
 }
 
 #[test]
+fn stops_a_managed_process_group_and_escalates_when_forced() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["graceful", "--", "/bin/sh", "-c", "sleep 30"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    let stop = environment.run(&["stop", "graceful"]);
+    assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
+    assert!(matches!(
+        wait_for_terminal_state(&environment, "graceful").as_str(),
+        "exited" | "killed"
+    ));
+    let repeated = environment.run(&["stop", "graceful"]);
+    assert_eq!(
+        repeated.status.code(),
+        Some(5),
+        "stderr: {:?}",
+        repeated.stderr
+    );
+
+    let force_launch = environment.run(&["forced", "--", "/bin/sleep", "30"]);
+    assert!(
+        force_launch.status.success(),
+        "stderr: {:?}",
+        force_launch.stderr
+    );
+    let force_stop = environment.run(&["stop", "forced", "--force"]);
+    assert!(
+        force_stop.status.success(),
+        "stderr: {:?}",
+        force_stop.stderr
+    );
+    assert_eq!(wait_for_terminal_state(&environment, "forced"), "killed");
+}
+
+#[test]
+fn escalates_when_the_managed_command_ignores_sigterm() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["stubborn", "--", "/bin/sh", "-c", "trap '' TERM; sleep 30"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+
+    let stop = environment.run(&["stop", "stubborn"]);
+    assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
+    assert_eq!(wait_for_terminal_state(&environment, "stubborn"), "killed");
+}
+
+#[test]
+fn supports_named_signals_and_rejects_unknown_signals() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["signalled", "--", "/bin/sleep", "30"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+
+    let unknown = environment.run(&["signal", "signalled", "9"]);
+    assert_eq!(
+        unknown.status.code(),
+        Some(1),
+        "stderr: {:?}",
+        unknown.stderr
+    );
+    let term = environment.run(&["signal", "signalled", "SIGTERM"]);
+    assert!(term.status.success(), "stderr: {:?}", term.stderr);
+    assert_eq!(wait_for_terminal_state(&environment, "signalled"), "killed");
+}
+
+#[test]
+fn restarts_and_starts_retained_terminal_records() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["repeat", "--", "/bin/sh", "-c", "printf repeat"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    assert_eq!(wait_for_terminal_state(&environment, "repeat"), "exited");
+
+    let restart = environment.run(&["restart", "repeat"]);
+    assert!(restart.status.success(), "stderr: {:?}", restart.stderr);
+    assert_eq!(wait_for_terminal_state(&environment, "repeat"), "exited");
+
+    let start = environment.run(&["start", "repeat"]);
+    assert!(start.status.success(), "stderr: {:?}", start.stderr);
+    assert_eq!(wait_for_terminal_state(&environment, "repeat"), "exited");
+
+    let logs = environment.run(&["logs", "repeat", "--stdout"]);
+    assert!(logs.status.success(), "stderr: {:?}", logs.stderr);
+    assert_eq!(String::from_utf8_lossy(&logs.stdout), "repeatrepeatrepeat");
+}
+
+#[test]
+fn restart_stops_an_active_record_before_relaunching_it() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["relaunch", "--", "/bin/sleep", "30"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+
+    let restart = environment.run(&["restart", "relaunch"]);
+    assert!(restart.status.success(), "stderr: {:?}", restart.stderr);
+    let stop = environment.run(&["stop", "relaunch", "--force"]);
+    assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
+    assert_eq!(wait_for_terminal_state(&environment, "relaunch"), "killed");
+}
+
+#[test]
+fn removes_terminal_records_and_clean_keeps_active_records() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["retained", "--", "/bin/true"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    assert_eq!(wait_for_terminal_state(&environment, "retained"), "exited");
+
+    let removed = environment.run(&["rm", "retained"]);
+    assert!(removed.status.success(), "stderr: {:?}", removed.stderr);
+    let missing = environment.run(&["status", "retained", "--json"]);
+    assert_eq!(
+        missing.status.code(),
+        Some(3),
+        "stderr: {:?}",
+        missing.stderr
+    );
+
+    let active = environment.run(&["active", "--", "/bin/sleep", "30"]);
+    assert!(active.status.success(), "stderr: {:?}", active.stderr);
+    let remove_active = environment.run(&["rm", "active"]);
+    assert_eq!(
+        remove_active.status.code(),
+        Some(5),
+        "stderr: {:?}",
+        remove_active.stderr
+    );
+    let clean = environment.run(&["clean"]);
+    assert!(clean.status.success(), "stderr: {:?}", clean.stderr);
+    let active_status = environment.run(&["status", "active", "--json"]);
+    assert!(
+        active_status.status.success(),
+        "stderr: {:?}",
+        active_status.stderr
+    );
+    let stop = environment.run(&["stop", "active", "--force"]);
+    assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
+}
+
+#[test]
 fn ps_orders_records_by_opaque_name() {
     let environment = TestEnvironment::new();
     for name in ["zeta", "alpha"] {
@@ -387,6 +521,23 @@ fn wait_for_state(environment: &TestEnvironment, name: &str) -> String {
                 serde_json::from_slice(&output.stdout).expect("status should be JSON");
             if let Some(state) = response["data"]["state"].as_str() {
                 if state == "exited" || state == "failed" {
+                    return state.to_owned();
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    panic!("process did not reach a terminal state");
+}
+
+fn wait_for_terminal_state(environment: &TestEnvironment, name: &str) -> String {
+    for _ in 0..120 {
+        let output = environment.run(&["status", name, "--json"]);
+        if output.status.success() {
+            let response: Value =
+                serde_json::from_slice(&output.stdout).expect("status should be JSON");
+            if let Some(state) = response["data"]["state"].as_str() {
+                if matches!(state, "exited" | "failed" | "killed") {
                     return state.to_owned();
                 }
             }

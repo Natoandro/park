@@ -18,6 +18,7 @@ use crate::project::resolve_project;
 use crate::result::ResultStatus;
 use crate::storage::{Storage, StorageError, StoragePaths};
 
+mod control;
 mod launch;
 mod logs;
 mod monitor;
@@ -93,6 +94,7 @@ impl Drop for DaemonLock {
 pub(super) struct DaemonState {
     pub(super) storage: Storage,
     active_launches: Mutex<std::collections::HashSet<ProcessKey>>,
+    lifecycle_locks: Mutex<std::collections::HashMap<ProcessKey, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 impl DaemonState {
@@ -108,6 +110,18 @@ impl DaemonState {
             active_launches: &self.active_launches,
             key,
         })
+    }
+
+    pub(super) fn lifecycle_lock(&self, key: &ProcessKey) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self
+            .lifecycle_locks
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        Arc::clone(
+            locks
+                .entry(key.clone())
+                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
+        )
     }
 }
 
@@ -137,6 +151,7 @@ pub async fn run(paths: StoragePaths) -> Result<bool, DaemonError> {
     let state = Arc::new(DaemonState {
         storage,
         active_launches: Mutex::new(std::collections::HashSet::new()),
+        lifecycle_locks: Mutex::new(std::collections::HashMap::new()),
     });
 
     loop {
@@ -228,6 +243,14 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
                 stderr,
             },
         },
+        operation @ (IpcOperation::Stop { .. }
+        | IpcOperation::Signal { .. }
+        | IpcOperation::Restart { .. }
+        | IpcOperation::Start { .. }
+        | IpcOperation::Remove { .. }
+        | IpcOperation::Clean) => {
+            DispatchResponse::Single(control::handle(state, request_id, operation).await)
+        }
         operation => handle_request(
             &state.storage,
             IpcRequest {
@@ -288,8 +311,34 @@ fn canonicalize_operation(
             stdout,
             stderr,
         }),
+        IpcOperation::Stop { key, force } => Ok(IpcOperation::Stop {
+            key: canonical_key(key)?,
+            force,
+        }),
+        IpcOperation::Signal { key, signal } => Ok(IpcOperation::Signal {
+            key: canonical_key(key)?,
+            signal,
+        }),
+        IpcOperation::Restart { key } => Ok(IpcOperation::Restart {
+            key: canonical_key(key)?,
+        }),
+        IpcOperation::Start { key } => Ok(IpcOperation::Start {
+            key: canonical_key(key)?,
+        }),
+        IpcOperation::Remove { key, keep_logs } => Ok(IpcOperation::Remove {
+            key: canonical_key(key)?,
+            keep_logs,
+        }),
         IpcOperation::Ping => Ok(IpcOperation::Ping),
+        IpcOperation::Clean => Ok(IpcOperation::Clean),
     }
+}
+
+fn canonical_key(key: ProcessKey) -> Result<ProcessKey, crate::ProjectResolutionError> {
+    Ok(ProcessKey::new(
+        resolve_project(key.project_path())?,
+        key.name().to_os_string(),
+    ))
 }
 
 fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
@@ -361,6 +410,16 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
             ),
             Err(error) => storage_error(request.request_id, error),
         },
+        IpcOperation::Stop { .. }
+        | IpcOperation::Signal { .. }
+        | IpcOperation::Restart { .. }
+        | IpcOperation::Start { .. }
+        | IpcOperation::Remove { .. }
+        | IpcOperation::Clean => IpcResponse::error(
+            request.request_id,
+            ResultStatus::Failure,
+            "lifecycle requests require the daemon dispatcher",
+        ),
     }
 }
 

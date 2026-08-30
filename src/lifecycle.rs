@@ -46,9 +46,8 @@ impl ProcessState {
             LifecycleAction::Signal => {
                 matches!(self, Self::Starting | Self::Running | Self::Stopping)
             }
-            LifecycleAction::Restart | LifecycleAction::Start | LifecycleAction::Remove => {
-                self.is_terminal()
-            }
+            LifecycleAction::Restart => self.is_terminal() || matches!(self, Self::Running),
+            LifecycleAction::Start | LifecycleAction::Remove => self.is_terminal(),
         };
 
         if valid {
@@ -113,7 +112,7 @@ mod tests {
                 .is_err()
         );
         assert!(
-            ProcessState::Running
+            ProcessState::Starting
                 .validate_action(LifecycleAction::Restart)
                 .is_err()
         );

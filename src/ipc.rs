@@ -47,6 +47,26 @@ pub enum IpcOperation {
         stdout: bool,
         stderr: bool,
     },
+    Stop {
+        key: ProcessKey,
+        force: bool,
+    },
+    Signal {
+        key: ProcessKey,
+        signal: String,
+    },
+    Restart {
+        key: ProcessKey,
+    },
+    Start {
+        key: ProcessKey,
+    },
+    #[serde(rename = "rm")]
+    Remove {
+        key: ProcessKey,
+        keep_logs: bool,
+    },
+    Clean,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -295,6 +315,54 @@ pub fn request_for_logs(request_id: u64, key: ProcessKey, options: IpcLogOptions
             stdout: options.stdout,
             stderr: options.stderr,
         },
+    }
+}
+
+pub fn request_for_stop(request_id: u64, key: ProcessKey, force: bool) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Stop { key, force },
+    }
+}
+
+pub fn request_for_signal(request_id: u64, key: ProcessKey, signal: String) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Signal { key, signal },
+    }
+}
+
+pub fn request_for_restart(request_id: u64, key: ProcessKey) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Restart { key },
+    }
+}
+
+pub fn request_for_start(request_id: u64, key: ProcessKey) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Start { key },
+    }
+}
+
+pub fn request_for_remove(request_id: u64, key: ProcessKey, keep_logs: bool) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Remove { key, keep_logs },
+    }
+}
+
+pub fn request_for_clean(request_id: u64) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Clean,
     }
 }
 

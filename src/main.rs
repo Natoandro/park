@@ -3,8 +3,9 @@ use std::{env, io::Write, process};
 use park_cli::{
     CommandResult, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, Invocation,
     IpcLogOptions, Operation, ResultStatus, StoragePaths, parse_invocation, render_json,
-    request_for_launch, request_for_logs, request_for_ps, request_for_status,
-    request_with_daemon_start, resolve_current_project, run_daemon,
+    request_for_clean, request_for_launch, request_for_logs, request_for_ps, request_for_remove,
+    request_for_restart, request_for_signal, request_for_start, request_for_status,
+    request_for_stop, request_with_daemon_start, resolve_current_project, run_daemon,
     stream_request_with_daemon_start,
 };
 use serde_json::Value;
@@ -110,15 +111,15 @@ fn run_supervisor() -> ! {
         SigSet::empty(),
     );
     unsafe {
-        sigaction(Signal::SIGTERM, &action).unwrap_or_else(|error| {
+        sigaction(Signal::SIGURG, &action).unwrap_or_else(|error| {
             supervisor_usage_error(&format!("could not handle parent death: {error}"))
         });
     }
-    prctl::set_pdeathsig(Signal::SIGTERM).unwrap_or_else(|error| {
+    prctl::set_pdeathsig(Signal::SIGURG).unwrap_or_else(|error| {
         supervisor_usage_error(&format!("could not monitor parent death: {error}"))
     });
     if getppid().as_raw() != expected_parent {
-        kill_managed_group(Signal::SIGTERM as i32);
+        kill_managed_group(Signal::SIGURG as i32);
     }
 
     match process::Command::new(executable).args(arguments).status() {
@@ -217,10 +218,26 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
                 None,
             );
         }
-        Invocation::Operation(other) => {
+        Invocation::Operation(Operation::Stop { name, force }) => {
+            request_for_stop(1, park_cli::ProcessKey::new(project, name), force)
+        }
+        Invocation::Operation(Operation::Signal { name, signal }) => {
+            request_for_signal(1, park_cli::ProcessKey::new(project, name), signal)
+        }
+        Invocation::Operation(Operation::Restart { name }) => {
+            request_for_restart(1, park_cli::ProcessKey::new(project, name))
+        }
+        Invocation::Operation(Operation::Start { name }) => {
+            request_for_start(1, park_cli::ProcessKey::new(project, name))
+        }
+        Invocation::Operation(Operation::Rm { name, keep_logs }) => {
+            request_for_remove(1, park_cli::ProcessKey::new(project, name), keep_logs)
+        }
+        Invocation::Operation(Operation::Clean) => request_for_clean(1),
+        Invocation::Operation(Operation::Wait(_)) => {
             return CommandResult::error(
                 ResultStatus::Failure,
-                format!("operation {other:?} is not implemented yet"),
+                "operation wait is not implemented yet",
             );
         }
     };

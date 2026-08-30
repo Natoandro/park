@@ -150,15 +150,23 @@ Phase 6 implementation decisions:
 
 ## Phase 7: Lifecycle Control
 
-- [ ] Implement `stop` as SIGTERM to the managed process group, timeout, then SIGKILL escalation.
-- [ ] Implement `stop --force` as immediate forceful group termination.
-- [ ] Implement `signal` with a defined set of supported named signals and optional numeric parsing only if approved.
-- [ ] Serialize lifecycle operations per process key to prevent stop/restart/remove races.
-- [ ] Implement `restart` from the recorded executable, arguments, and working directory.
-- [ ] Implement `start` only for retained terminal records.
-- [ ] Implement `rm` as a separate operation that refuses active records and respects `--keep-logs`.
-- [ ] Implement `clean` with an explicit, conservative eligibility policy for terminal records.
-- [ ] Test graceful child-tree shutdown, forced shutdown, repeated operations, restart after exit, and removal behavior.
+- [x] Implement `stop` as SIGTERM to the managed process group, timeout, then SIGKILL escalation.
+- [x] Implement `stop --force` as immediate forceful group termination.
+- [x] Implement `signal` with a defined set of supported named signals and optional numeric parsing only if approved.
+- [x] Serialize lifecycle operations per process key to prevent stop/restart/remove races.
+- [x] Implement `restart` from the recorded executable, arguments, and working directory.
+- [x] Implement `start` only for retained terminal records.
+- [x] Implement `rm` as a separate operation that refuses active records and respects `--keep-logs`.
+- [x] Implement `clean` with an explicit, conservative eligibility policy for terminal records.
+- [x] Test graceful child-tree shutdown, forced shutdown, repeated operations, restart after exit, and removal behavior.
+
+Phase 7 implementation decisions:
+
+- `stop` uses a two-second grace period. The default sends SIGTERM to the verified process group; `--force` skips directly to SIGKILL. Both operations wait for the monitor to persist a terminal result.
+- Supported named signals are HUP, INT, QUIT, TERM, USR1, USR2, STOP, CONT, and KILL, with an optional `SIG` prefix. Numeric signal parsing is deferred because it was not approved for this phase.
+- A per-key daemon lock serializes launch, stop, signal, restart, start, remove, and clean mutations. Monitor writes carry the spawned PID and ignore stale terminal updates after a later start attempt.
+- Restart stops a running record before reusing its recorded command. Start is limited to terminal records. Both reset the current lifecycle fields and append output to the existing stdout and stderr logs.
+- `rm` refuses active records or a still-present recorded process group and deletes metadata plus logs unless `--keep-logs` is set. `clean` removes terminal records with no remaining process group across the user's Park state and never removes active records.
 
 ## Phase 8: Agent Coordination and Hardening
 

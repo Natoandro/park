@@ -40,7 +40,7 @@ Launch reserves its complete process key in the daemon for the check/create/spaw
 
 `stop` transitions a running record to `stopping`, sends SIGTERM to its process group, waits for the configured grace period, and sends SIGKILL only if still alive. `--force` skips directly to forceful termination. `signal` validates the requested supported signal and targets the same group. Terminal transitions record either the exit code or signal, and no lifecycle action may silently overwrite a record.
 
-`restart` stops the current group then spawns from the preserved executable, arguments, and working directory. It must serialize operations on an individual record so concurrent stop, restart, and remove requests cannot race. `rm` is distinct from `stop`: it removes metadata and, unless `--keep-logs` is set, log files only after the process is no longer active.
+`restart` stops the current group when necessary, then spawns from the preserved executable, arguments, and working directory. `start` is restricted to retained terminal records. Both operations reset the lifecycle fields and append new output to the existing stream logs. Lifecycle operations serialize on an individual record so concurrent stop, restart, signal, and remove requests cannot race. `rm` is distinct from `stop`: it removes metadata and, unless `--keep-logs` is set, log files only after the process is no longer active. `clean` removes terminal records and their logs only when their recorded process group is also gone; active records are never eligible.
 
 ## Logging
 
