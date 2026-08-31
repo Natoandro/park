@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::PathBuf;
@@ -14,7 +15,7 @@ use crate::ipc::{
     IpcError, IpcOperation, IpcRequest, IpcResponse, PROTOCOL_VERSION, read_request, record_value,
     write_response,
 };
-use crate::process::{ProcessKey, ProcessRecord};
+use crate::process::{ProcessKey, ProcessRecord, validate_process_name};
 use crate::project::resolve_project;
 use crate::result::ResultStatus;
 use crate::storage::{Storage, StorageError, StoragePaths};
@@ -237,6 +238,15 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
             ));
         }
     };
+    if let Some(name) = operation_name(&operation)
+        && let Err(error) = validate_process_name(name)
+    {
+        return DispatchResponse::Single(IpcResponse::error(
+            request_id,
+            ResultStatus::Failure,
+            error.to_string(),
+        ));
+    }
     match operation {
         IpcOperation::Launch {
             project_path,
@@ -298,6 +308,21 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
             },
         )
         .into(),
+    }
+}
+
+fn operation_name(operation: &IpcOperation) -> Option<&OsStr> {
+    match operation {
+        IpcOperation::Launch { name, .. } => Some(name),
+        IpcOperation::Status { key }
+        | IpcOperation::Logs { key, .. }
+        | IpcOperation::Wait { key, .. }
+        | IpcOperation::Stop { key, .. }
+        | IpcOperation::Signal { key, .. }
+        | IpcOperation::Restart { key }
+        | IpcOperation::Start { key }
+        | IpcOperation::Remove { key, .. } => Some(key.name()),
+        IpcOperation::Ping | IpcOperation::Ps { .. } | IpcOperation::Clean => None,
     }
 }
 

@@ -1,8 +1,12 @@
+use std::ffi::OsString;
+use std::os::unix::ffi::OsStringExt;
 use std::time::Duration;
 
 use rusqlite::{Connection, TransactionBehavior};
 
-use crate::process::{ProcessKey, ProcessRecord, ProcessRecordValidationError};
+use crate::process::{
+    ProcessKey, ProcessRecord, ProcessRecordValidationError, validate_process_name,
+};
 
 use super::record_codec::{
     StoredRecord, decode_stored_record, insert_record, load_arguments, load_record_with_connection,
@@ -126,13 +130,15 @@ impl Storage {
                     source,
                 })?;
         drop(statement);
-        stored_records
-            .into_iter()
-            .map(|stored| {
-                let arguments = load_arguments(&connection, &stored.digest)?;
-                decode_stored_record(self, stored, arguments, None)
-            })
-            .collect()
+        let mut records = Vec::new();
+        for stored in stored_records {
+            if validate_process_name(&OsString::from_vec(stored.name_bytes().to_vec())).is_err() {
+                continue;
+            }
+            let arguments = load_arguments(&connection, &stored.digest)?;
+            records.push(decode_stored_record(self, stored, arguments, None)?);
+        }
+        Ok(records)
     }
 
     fn validate_record(&self, record: &ProcessRecord) -> Result<(), StorageError> {

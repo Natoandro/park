@@ -41,7 +41,7 @@ Phase 1 syntax decisions:
 
 - The readable subcommand form is canonical; each operation also accepts a `--<operation>` alias.
 - The short launch form is selected by a `--` separator immediately after the ASCII process name.
-- Names have no reserved-word or lexical validation. They are passed as one command-line argument, with normal shell/OS argument-boundary rules.
+- New names use only ASCII letters, digits, `.`, `_`, `-`, and `:`, with no whitespace. Operation words are not reserved, and names are passed as one command-line argument with normal shell/OS argument-boundary rules.
 - `run` is an optional explicit launch alias, not a requirement.
 - Lifecycle result codes are `0` for success, `1` for generic failure, `3` for missing records, `4` for duplicate records, and `5` for invalid state. CLI usage errors use `2`.
 

@@ -256,12 +256,32 @@ where
     let mut operation_args = args;
     normalize_operation_alias(&mut operation_args);
     let parsed = OperationCli::try_parse_from(operation_args)?;
-    Ok(Invocation::Operation(parsed.operation.into()))
+    let operation = parsed.operation.into();
+    validate_operation_name(&operation)?;
+    Ok(Invocation::Operation(operation))
 }
 
 fn validate_launch_name(name: &OsString) -> Result<(), clap::Error> {
     validate_process_name(name)
         .map_err(|error| clap::Error::raw(clap::error::ErrorKind::InvalidValue, error.to_string()))
+}
+
+fn validate_operation_name(operation: &Operation) -> Result<(), clap::Error> {
+    let name = match operation {
+        Operation::Status { name, .. }
+        | Operation::Logs(LogsArgs { name, .. })
+        | Operation::Stop { name, .. }
+        | Operation::Restart { name }
+        | Operation::Start { name }
+        | Operation::Signal { name, .. }
+        | Operation::Rm { name, .. }
+        | Operation::Wait(WaitArgs { name, .. }) => Some(name),
+        Operation::Ps { .. } | Operation::Clean | Operation::HelpSkills { .. } => None,
+    };
+    if let Some(name) = name {
+        validate_launch_name(name)?;
+    }
+    Ok(())
 }
 
 fn normalize_operation_alias(args: &mut [OsString]) {

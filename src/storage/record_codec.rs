@@ -27,6 +27,10 @@ pub(super) struct StoredRecord {
 }
 
 impl StoredRecord {
+    pub(super) fn name_bytes(&self) -> &[u8] {
+        &self.name
+    }
+
     pub(super) fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
             digest: row.get(0)?,
@@ -147,6 +151,9 @@ pub(super) fn load_record_with_connection(
     connection: &Connection,
     key: &ProcessKey,
 ) -> Result<Option<ProcessRecord>, StorageError> {
+    if crate::process::validate_process_name(key.name()).is_err() {
+        return Ok(None);
+    }
     let digest = files::key_digest(key);
     let stored = connection
         .query_row(

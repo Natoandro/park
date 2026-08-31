@@ -562,7 +562,7 @@ fn removes_terminal_records_and_clean_keeps_active_records() {
 }
 
 #[test]
-fn ps_orders_records_by_opaque_name() {
+fn ps_orders_records_by_name() {
     let environment = TestEnvironment::new();
     for name in ["zeta", "alpha"] {
         let launch = environment.run(&[name, "--", "/bin/true"]);

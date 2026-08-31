@@ -46,6 +46,9 @@ are not global across the user's projects:
 ~/code/api  + dev  -> another record
 ```
 
+New process names must contain only ASCII letters, digits, `.`, `_`, `-`, and
+`:`, with no whitespace.
+
 Park canonicalizes the invocation directory for lookups and creation. This
 means relative paths, `.` components, and symlink aliases do not silently create
 separate project namespaces. A duplicate name in the same canonical project is

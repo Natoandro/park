@@ -127,7 +127,7 @@ fn round_trips_exact_non_utf8_process_arguments() {
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
     let (_root, storage, project) = test_storage();
-    let name = OsString::from_vec(vec![b'd', 0xff]);
+    let name = OsString::from("non-utf8-args");
     let key = ProcessKey::new(project.clone(), name);
     let logs = storage.create_logs(&key).expect("logs should be created");
     let mut record = ProcessRecord::new(
@@ -152,6 +152,33 @@ fn round_trips_exact_non_utf8_process_arguments() {
     assert_eq!(loaded.key(), &key);
     assert_eq!(loaded.executable().as_bytes(), &[b's', 0xfe]);
     assert_eq!(loaded.arguments()[0].as_bytes(), &[b'a', 0xfd]);
+}
+
+#[cfg(unix)]
+#[test]
+fn treats_persisted_records_with_invalid_names_as_absent() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let (_root, storage, project) = test_storage();
+    let name = OsString::from_vec(b"legacy-\xff".to_vec());
+    let record = record(&storage, &project, name.clone());
+    let key = record.key().clone();
+    storage
+        .create_record(&record)
+        .expect("record should be persisted");
+
+    assert!(
+        storage
+            .load_record(&key)
+            .expect("record lookup should succeed")
+            .is_none()
+    );
+    assert!(
+        storage
+            .list_records()
+            .expect("record listing should succeed")
+            .is_empty()
+    );
 }
 
 #[test]
