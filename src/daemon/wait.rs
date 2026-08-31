@@ -10,7 +10,7 @@ use crate::lifecycle::ProcessState;
 use crate::process::{ProcessKey, ProcessRecord};
 use crate::result::ResultStatus;
 
-use super::{DaemonState, epoch_seconds, record_is_alive};
+use super::DaemonState;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
@@ -44,13 +44,9 @@ pub(super) async fn serve(
     let deadline =
         timeout_ms.map(|milliseconds| Instant::now() + Duration::from_millis(milliseconds));
     loop {
-        if let Err(error) = state.storage.reconcile(epoch_seconds(), record_is_alive) {
-            return write_response(
-                stream,
-                &IpcResponse::error(request_id, ResultStatus::Failure, error.to_string()),
-            )
-            .await;
-        }
+        // The monitor owns active records in this daemon. Startup reconciliation already handles
+        // records recovered after a daemon restart; reconciling here can race the monitor's
+        // terminal update and lose the real exit code or signal.
         let record = match state.storage.load_record(&key) {
             Ok(Some(record)) => record,
             Ok(None) => {
