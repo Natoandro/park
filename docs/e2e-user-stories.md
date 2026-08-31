@@ -55,10 +55,10 @@ names. Assert their presence, type, ordering, and relationships instead.
 ### JSON assertions
 
 Inspection and log JSON responses are structured command results. Tests should
-assert `status`, `ok`, and relevant `data` or `error` fields. Record data may
-contain encoded Unix argument values; tests should verify lossless round trips
-rather than assuming all names and arguments are ordinary UTF-8. Paths and
-process identifiers should be checked for consistency, not fixed values.
+assert `status`, `ok`, and relevant `data` or `error` fields. Process names are
+ASCII; command executables and arguments may contain arbitrary Unix bytes, so
+tests should verify lossless round trips for those values. Paths and process
+identifiers should be checked for consistency, not fixed values.
 
 ## Foundation And CLI
 
@@ -109,7 +109,7 @@ process identifiers should be checked for consistency, not fixed values.
 
 ### PARK-CLI-004: Treat operation words as valid launch names
 
-- **Scope:** Opaque process names
+- **Scope:** ASCII process names
 - **Priority:** P1
 - **Actor:** Developer
 - **Story:** As a developer, I want names such as `status` to be valid, so
@@ -127,7 +127,7 @@ process identifiers should be checked for consistency, not fixed values.
 - **Priority:** P1
 - **Actor:** Developer
 - **Story:** As a developer, I want a name such as `--status`, so that Park
-  does not impose lexical restrictions on process names.
+  supports useful ASCII punctuation without reserving operation words.
 - **Preconditions:** No such record exists.
 - **Scenario:** Run `park --status -- /bin/true`, then inspect it with the
   canonical status form using the exact name.
@@ -243,20 +243,19 @@ process identifiers should be checked for consistency, not fixed values.
 - **Acceptance criteria:** The command exits `1`; stderr explains the project
   resolution failure; no record or daemon state is created for that operation.
 
-### PARK-SCOPE-006: Keep names opaque and lossless on Unix
+### PARK-SCOPE-006: Keep non-UTF-8 command arguments lossless on Unix
 
 - **Scope:** Unix argument handling
 - **Priority:** P2
 - **Actor:** Developer
-- **Story:** As a Unix user, I want non-UTF-8 names and arguments preserved, so
-  that Park can manage ordinary Unix argument values without corrupting them.
+- **Story:** As a Unix user, I want non-UTF-8 command arguments preserved, so that
+  Park can manage ordinary Unix argument values without corrupting them.
 - **Preconditions:** The test runner can construct non-UTF-8 Unix arguments.
-- **Scenario:** Launch a command with a non-UTF-8 name or argument; inspect JSON,
-  restart it, and query its logs.
-- **Acceptance criteria:** The record remains addressable with the original
-  bytes; JSON exposes stable field types; restart passes the same bytes; no
-  lossy replacement changes the command. The test does not assert a particular
-  encoding unless that encoding becomes public contract.
+- **Scenario:** Launch a command with an ASCII name and a non-UTF-8 argument;
+  inspect JSON, restart it, and query its logs.
+- **Acceptance criteria:** The record remains addressable by its ASCII name;
+  JSON exposes stable field types; restart passes the same argument bytes; no
+  lossy replacement changes the command.
 
 ## Launch, Capture, And Exit Records
 

@@ -13,7 +13,7 @@ Use this checklist for recurring reviews of Park changes. Reviewers should focus
 
 ## CLI And Project Resolution
 
-- [ ] Opaque names and exact OS command arguments remain lossless, including non-UTF-8 Unix values where supported.
+- [ ] New process names contain only ASCII letters, digits, `.`, `_`, `-`, and `:`; exact OS command arguments remain lossless, including non-UTF-8 Unix values where supported.
 - [ ] `--` command boundaries and dash-prefixed names are parsed without ambiguity regressions.
 - [ ] The CLI canonicalizes the invocation directory before creating lookup keys.
 - [ ] The daemon independently canonicalizes every project path received over IPC.

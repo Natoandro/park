@@ -7,7 +7,7 @@ use nix::unistd::Pid;
 use tokio::process::{Child, Command};
 
 use crate::ipc::{IpcResponse, record_value};
-use crate::process::{ProcessKey, ProcessRecord};
+use crate::process::{ProcessKey, ProcessRecord, validate_process_name};
 use crate::project::ProjectPath;
 use crate::result::ResultStatus;
 
@@ -20,6 +20,9 @@ pub(super) async fn start(
     name: OsString,
     command: Vec<OsString>,
 ) -> IpcResponse {
+    if let Err(error) = validate_process_name(&name) {
+        return IpcResponse::error(request_id, ResultStatus::Failure, error.to_string());
+    }
     let key = ProcessKey::new(project_path.clone(), name);
     let lifecycle_lock = state.lifecycle_lock(&key);
     let _lifecycle_guard = lifecycle_lock.lock().await;

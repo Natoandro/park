@@ -1,4 +1,5 @@
 use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,29 @@ use crate::project::ProjectPath;
 
 /// Unix epoch seconds used for durable lifecycle timestamps.
 pub type EpochSeconds = u64;
+
+pub fn validate_process_name(name: &OsStr) -> Result<(), ProcessNameError> {
+    let bytes = name.as_bytes();
+    if bytes.is_empty() {
+        return Err(ProcessNameError::Empty);
+    }
+    if let Some((index, byte)) = bytes.iter().copied().enumerate().find(|(_, byte)| {
+        !byte.is_ascii_alphanumeric() && !matches!(byte, b'.' | b'_' | b'-' | b':')
+    }) {
+        return Err(ProcessNameError::InvalidByte { index, byte });
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ProcessNameError {
+    #[error("process name must not be empty")]
+    Empty,
+    #[error(
+        "process name contains unsupported byte 0x{byte:02x} at byte {index}; use ASCII letters, digits, '.', '_', '-' or ':'"
+    )]
+    InvalidByte { index: usize, byte: u8 },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProcessKey {

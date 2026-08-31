@@ -26,7 +26,8 @@ pub use lifecycle::{
     InvalidLifecycleAction, InvalidStateTransition, LifecycleAction, ProcessState,
 };
 pub use process::{
-    EpochSeconds, LogPaths, ProcessKey, ProcessRecord, ProcessRecordValidationError,
+    EpochSeconds, LogPaths, ProcessKey, ProcessNameError, ProcessRecord,
+    ProcessRecordValidationError, validate_process_name,
 };
 pub use project::{ProjectPath, ProjectResolutionError, resolve_current_project, resolve_project};
 pub use registry::{ProcessRegistry, RegistryError};

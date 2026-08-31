@@ -40,7 +40,7 @@ Recorded decisions:
 Phase 1 syntax decisions:
 
 - The readable subcommand form is canonical; each operation also accepts a `--<operation>` alias.
-- The short launch form is selected by a `--` separator immediately after the opaque name.
+- The short launch form is selected by a `--` separator immediately after the ASCII process name.
 - Names have no reserved-word or lexical validation. They are passed as one command-line argument, with normal shell/OS argument-boundary rules.
 - `run` is an optional explicit launch alias, not a requirement.
 - Lifecycle result codes are `0` for success, `1` for generic failure, `3` for missing records, `4` for duplicate records, and `5` for invalid state. CLI usage errors use `2`.
@@ -59,7 +59,7 @@ Phase 1 syntax decisions:
 Phase 2 implementation decisions:
 
 - `ProjectPath` is constructed only from canonicalized existing directories. The current working directory is resolved directly; Git-root discovery is not performed.
-- `ProcessKey` owns the canonical `ProjectPath` and opaque process name. Registry access accepts only a complete `ProcessKey`, never a name alone.
+- `ProcessKey` owns the canonical `ProjectPath` and process name. New process names use ASCII letters, digits, `.`, `_`, `-`, and `:`. Registry access accepts only a complete `ProcessKey`, never a name alone.
 - New records begin in `starting`; valid transitions cover successful startup, graceful stopping, natural failure, and forceful termination. Terminal states cannot transition further.
 - The in-memory registry rejects duplicate canonical keys while allowing identical names under distinct project paths. Durable storage was implemented in Phase 3.
 
@@ -78,7 +78,7 @@ Phase 2 implementation decisions:
 Phase 3 implementation decisions:
 
 - Durable state uses `$XDG_STATE_HOME/park`, falling back to `$HOME/.local/state/park`. Runtime state uses `$XDG_RUNTIME_DIR/park`, falling back to a private `runtime/park` directory under the durable state directory.
-- Process metadata is stored in `$XDG_STATE_HOME/park/park.sqlite3` (or the documented fallback), while logs remain under its `logs` directory. SQLite identity columns use lossless Unix BLOB values for canonical project paths and opaque names.
+- Process metadata is stored in `$XDG_STATE_HOME/park/park.sqlite3` (or the documented fallback), while logs remain under its `logs` directory. SQLite identity columns use lossless Unix BLOB values for canonical project paths and ASCII process names.
 - SQLite schema version 1 stores scalar process metadata in normalized columns,
   with ordered raw command arguments in a child table. It creates a unique
   `(project_path, name)` index, uses SQLite transactions for atomic record
@@ -123,7 +123,7 @@ Phase 4 implementation decisions:
 
 Phase 5 implementation decisions:
 
-- Launch requests carry the canonical project path, opaque name, and exact OS argument vector over IPC. The daemon rejects any existing record for the complete key, including retained terminal records.
+- Launch requests carry the canonical project path, ASCII name, and exact OS argument vector over IPC. The daemon rejects any existing record for the complete key, including retained terminal records.
 - The daemon creates both log files and persists a `starting` record before spawning. On Linux it starts a Park supervisor, sets the supervisor as the leader of a dedicated session/process group, and records the supervisor's `/proc` start time. The supervisor starts the exact target argument vector without a shell and kills its group when the daemon dies.
 - Independent Tokio capture tasks append raw stdout and stderr bytes to their respective files. The child is waited independently so output draining cannot block termination monitoring.
 - A successful spawn records the PID, process-group ID, Linux process start time where available, and `running` state before returning success. Startup reconciliation requires the recorded Linux identity to match before treating a record as live. Spawn errors retain the pre-created record as `failed` with the diagnostic.
@@ -145,7 +145,7 @@ Phase 5 implementation decisions:
 
 Phase 6 implementation decisions:
 
-- `ps` and `status` reconcile active records against verified process identity before reading them. `ps` sorts names by their raw Unix argument bytes, preserving deterministic ordering for non-UTF-8 names.
+- `ps` and `status` reconcile active records against verified process identity before reading them. `ps` sorts names by their ASCII bytes.
 - Log JSON data uses stable `stream`, `content`, and `state` fields. Content is returned as UTF-8 with replacement for invalid bytes; the durable files retain the original bytes.
 - Combined output is stdout followed by stderr. This is deterministic but does not claim to reconstruct cross-stream event timing.
 - `--grep` is a literal substring filter applied line-by-line before `--head` or `--tail`. Regex search is not yet implemented; adding it would require another dependency.

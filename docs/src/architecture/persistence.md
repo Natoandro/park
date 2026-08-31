@@ -32,7 +32,7 @@ advisory lock does.
 SQLite stores one record for each canonical `(project_path, name)` key. A
 record includes:
 
-- The opaque process name and lossless canonical project path.
+- The ASCII process name and lossless canonical project path.
 - The recorded working directory.
 - The exact executable and argument vector.
 - Process and process-group identifiers where supported.

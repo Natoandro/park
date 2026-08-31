@@ -4,6 +4,7 @@ use clap::{ArgGroup, Args, Parser, Subcommand};
 use std::num::ParseIntError;
 
 use crate::lifecycle::ProcessState;
+use crate::process::validate_process_name;
 
 /// The operation requested by a user, before a daemon handles it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -220,7 +221,7 @@ fn parse_duration(value: &str) -> Result<u64, String> {
         .ok_or_else(|| "duration is too large".to_owned())
 }
 
-/// Parse the public CLI grammar without imposing lexical restrictions on names.
+/// Parse the public CLI grammar while validating names for new launches.
 ///
 /// A launch is identified by the `--` separator immediately after its name.
 /// This lets a process be named after an operation, for example
@@ -234,6 +235,7 @@ where
 
     if args.get(2).is_some_and(|arg| arg == "--") {
         let parsed = LaunchCli::try_parse_from(args)?;
+        validate_launch_name(&parsed.name)?;
         return Ok(Invocation::Launch {
             name: parsed.name,
             command: parsed.command,
@@ -244,6 +246,7 @@ where
         let mut run_args = args;
         run_args.remove(1);
         let parsed = RunCli::try_parse_from(run_args)?;
+        validate_launch_name(&parsed.name)?;
         return Ok(Invocation::Launch {
             name: parsed.name,
             command: parsed.command,
@@ -254,6 +257,11 @@ where
     normalize_operation_alias(&mut operation_args);
     let parsed = OperationCli::try_parse_from(operation_args)?;
     Ok(Invocation::Operation(parsed.operation.into()))
+}
+
+fn validate_launch_name(name: &OsString) -> Result<(), clap::Error> {
+    validate_process_name(name)
+        .map_err(|error| clap::Error::raw(clap::error::ErrorKind::InvalidValue, error.to_string()))
 }
 
 fn normalize_operation_alias(args: &mut [OsString]) {

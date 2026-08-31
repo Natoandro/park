@@ -49,6 +49,23 @@ fn parses_a_dash_prefixed_name() {
 }
 
 #[test]
+fn accepts_colons_in_launch_names() {
+    assert_eq!(
+        parse(&["park", "api:dev", "--", "./server"]),
+        Invocation::Launch {
+            name: "api:dev".into(),
+            command: vec!["./server".into()],
+        }
+    );
+}
+
+#[test]
+fn rejects_non_ascii_or_whitespace_in_launch_names() {
+    assert!(parse_invocation(["park", "api dev", "--", "./server"]).is_err());
+    assert!(parse_invocation(["park", "api\u{e9}", "--", "./server"]).is_err());
+}
+
+#[test]
 fn parses_status_and_json() {
     assert_eq!(
         parse(&["park", "status", "dev", "--json"]),
