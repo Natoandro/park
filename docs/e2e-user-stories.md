@@ -985,7 +985,7 @@ process identifiers should be checked for consistency, not fixed values.
   files. With an unusable configured path, the test asserts the documented
   failure rather than assuming an additional fallback.
 - **Test note:** Keep the two environment cases separate; they have different
-  public outcomes in the current implementation.
+  public outcomes in the current version.
 
 ### PARK-DAEMON-006: Reconcile an active record after daemon loss
 
@@ -1172,10 +1172,10 @@ process identifiers should be checked for consistency, not fixed values.
 - **Acceptance criteria:** Only the targeted or eligible Park records and their
   key-derived logs are removed; active groups and unrelated files remain.
 
-## Explicitly Out Of Scope For Current MVP E2E Tests
+## Explicitly Out Of Scope For Current E2E Tests
 
-The following are deferred capabilities, not missing test cases for the current
-contract:
+The following capabilities are not yet implemented, so they are not missing test
+cases for the current contract:
 
 - Project configuration files and `park up` / `park down` orchestration.
 - Git-root project resolution as an alternate policy.

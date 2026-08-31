@@ -15,22 +15,25 @@ Run the project-level command from the repository where the skill should be
 available:
 
 ```bash
-npx skills add Natoandro/park --skill park -a opencode
+npx skills add Natoandro/park --skill park
 ```
 
-Replace `opencode` with another supported agent, such as `codex`,
-`claude-code`, or `cursor`. To install the skill for all projects, use the
-global option:
+The `npx skills` CLI detects available agents and lets you choose when needed.
+To target one agent explicitly, add `-a <agent>`, such as `-a opencode`, `-a
+codex`, `-a claude-code`, or `-a cursor`. To install the skill for all projects,
+use the global option:
 
 ```bash
-npx skills add Natoandro/park --skill park -g -a opencode
+npx skills add Natoandro/park --skill park -g
 ```
 
 For a one-off session without installing the skill:
 
 ```bash
-npx skills use Natoandro/park --skill park --agent opencode
+npx skills use Natoandro/park --skill park
 ```
+
+This prints a prompt. Add `--agent <agent>` to start a specific supported agent.
 
 Review a skill before installing it, especially when it comes from a source you
 do not control. The skill contains instructions for an agent; it does not grant

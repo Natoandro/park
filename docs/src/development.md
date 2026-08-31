@@ -1,8 +1,9 @@
 # Development Status
 
-Park is an active-development Unix-first Rust MVP. The package is `park-cli`,
-the binary is `park`, and the current package version is `0.1.0`. It is not yet
-published to crates.io.
+Park is an active-development Unix-first project. The package is `park-cli`,
+the binary is `park`, and the current package version is `0.1.3`. The latest
+release is published to crates.io; see [Installation](installation.md) for the
+stable and latest-development installation commands.
 
 The current design and implementation preserve a narrow contract: launch
 configuration-free ad-hoc commands, identify them by canonical project path and
@@ -35,19 +36,19 @@ part of the current policy.
 
 ## Platform Limit
 
-The MVP targets Unix. Linux has the strongest ownership and reconciliation
+Park currently targets Unix. Linux has the strongest ownership and reconciliation
 guarantees because Park can validate `/proc` start times, process groups, and
 sessions. Other Unix targets retain the Unix interface but do not yet claim the
-same process-identity verification across daemon restarts. Windows support is
-deferred.
+same process-identity verification across daemon restarts. Windows support is not
+yet implemented.
 
 Park does not provide process isolation or sandboxing. Managed commands run as
 host processes and share host resources. Use containers or a virtual machine if
 that boundary is required.
 
-## Planned Work
+## Not Yet Implemented
 
-The post-MVP roadmap includes:
+The following capabilities are not yet implemented:
 
 - Opt-in automatic restart policies with backoff and retry limits.
 - Filesystem-triggered restarts for development workflows.
@@ -59,6 +60,6 @@ The post-MVP roadmap includes:
 - Faster and richer log queries, structured log metadata, and optional external
   log export.
 
-These planned features must preserve configuration-free launches and the
-existing project/name identity. Process isolation and sandboxing are not planned
-as Park core features.
+Changes must preserve configuration-free launches and the existing project/name
+identity. Process isolation and sandboxing are not supported by Park's core
+design.

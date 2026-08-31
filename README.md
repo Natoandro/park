@@ -5,26 +5,27 @@ Park is a project-scoped background process manager for local development. It ru
 The Rust package is `park-cli`; the installed executable is `park`.
 
 > [!NOTE]
-> Park is under active development and is not yet published to crates.io.
+> Park is under active development. The latest published release is available
+> from crates.io.
 
 ## Installation
 
-Install the latest development version directly from GitHub:
-
-```bash
-cargo install --git https://github.com/Natoandro/park.git park-cli
-```
-
-For a local checkout, use `cargo install --path .` instead.
-
-<details>
-<summary>After publication to crates.io</summary>
+Install the latest published release from crates.io:
 
 ```bash
 cargo install park-cli
 ```
 
-</details>
+This installs the `park` executable from the `park-cli` package.
+
+To try the latest development version from the `master` branch:
+
+```bash
+cargo install --git https://github.com/Natoandro/park.git --branch master park-cli
+```
+
+The `master` build may be unstable and can differ from the latest published
+release. For a local checkout, use `cargo install --path .` instead.
 
 ## AI Agent Integration
 
@@ -33,23 +34,28 @@ CLI. The skill teaches agents to inspect existing records, use project-scoped
 names, wait for readiness, read retained logs, and avoid disrupting processes
 owned by another actor.
 
-Install it for OpenCode in the current project:
+Install it for the current project. The `npx skills` CLI detects available agents
+and lets you choose when needed:
 
 ```bash
-npx skills add Natoandro/park --skill park -a opencode
+npx skills add Natoandro/park --skill park
 ```
 
 Install it globally instead:
 
 ```bash
-npx skills add Natoandro/park --skill park -g -a opencode
+npx skills add Natoandro/park --skill park -g
 ```
 
-Use it for one session without installing it:
+To target a specific agent, add `-a <agent>`, for example `-a opencode`. Use the
+skill for one session without installing it with:
 
 ```bash
-npx skills use Natoandro/park --skill park --agent opencode
+npx skills use Natoandro/park --skill park
 ```
+
+The one-off command prints a prompt; add `--agent <agent>` to start a specific
+supported agent.
 
 Discover the integration guide from the installed binary:
 
@@ -104,7 +110,7 @@ Park is intended for:
 - [x] Status, log inspection, filtering, following, signals, graceful stop, restart, start, removal, cleanup, and wait operations.
 - [x] Stable JSON output and lifecycle exit codes for scripts and coding agents.
 
-### Planned
+### Not Yet Implemented
 
 - [ ] Automatic restart policies with backoff and retry limits.
 - [ ] Filesystem-triggered restarts for development workflows.
@@ -113,7 +119,7 @@ Park is intended for:
 - [ ] Broader platform-specific process-ownership and lifecycle guarantees.
 - [ ] Log rotation, retention, and pruning.
 
-See the [post-MVP roadmap](docs/implementation-plan.md#post-mvp-roadmap) for the complete prioritized list.
+See the [roadmap](docs/implementation-plan.md#roadmap) for the complete prioritized list.
 
 ## Development
 
@@ -184,7 +190,7 @@ Park is conceptually related to Unix process supervisors such as [Supervisor](ht
 
 Park stores process metadata in a private SQLite database at `$XDG_STATE_HOME/park/park.sqlite3`, falling back to `$HOME/.local/state/park/park.sqlite3`. Standard output and standard error remain separate append-only files under the adjacent `logs` directory. The daemon socket, lock, and PID marker are ephemeral files under `$XDG_RUNTIME_DIR/park`, with a state-directory fallback when the runtime directory is unavailable.
 
-The MVP's strongest process-ownership checks are implemented on Linux using `/proc` start times, process groups, and sessions. Other Unix targets retain the Unix interface but cannot safely verify process identity across daemon restarts yet.
+Park's strongest process-ownership checks are implemented on Linux using `/proc` start times, process groups, and sessions. Other Unix targets retain the Unix interface but cannot safely verify process identity across daemon restarts yet.
 
 ## Design Documents
 

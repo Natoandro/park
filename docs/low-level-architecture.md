@@ -25,7 +25,7 @@ Use versioned, newline-delimited JSON request/response messages with an operatio
 
 ## Spawn and Monitoring
 
-1. Validate the canonical key is absent; explicit replacement is deferred until lifecycle semantics are complete.
+1. Validate the canonical key is absent; explicit replacement is not yet implemented because lifecycle semantics are not complete.
 2. Create durable record and log destinations before spawning.
 3. On Linux, spawn a Park supervisor directly from the executable and argument vector in the recorded working directory. The supervisor starts the managed command without a shell and kills its process group when the daemon dies. Other Unix platforms currently spawn the managed command directly.
 4. Create a new process group/session on supported Unix platforms.
@@ -46,18 +46,18 @@ Launch reserves its complete process key in the daemon for the check/create/spaw
 
 ## Logging
 
-Write stdout and stderr separately with append-only records. The combined `logs` view uses the MVP's deterministic stdout-then-stderr ordering because capture files do not carry a shared event sequence. `--stdout` and `--stderr` read their respective streams. `--grep` is a literal substring filter on retained lines, applied before `--tail` or `--head`; `--follow` sends bounded IPC frames for the initial retained output and appended output, then reports a clean terminal status. Follow filters apply to the initial snapshot; later output is streamed without head/tail limits.
+Write stdout and stderr separately with append-only records. The combined `logs` view uses Park's current deterministic stdout-then-stderr ordering because capture files do not carry a shared event sequence. `--stdout` and `--stderr` read their respective streams. `--grep` is a literal substring filter on retained lines, applied before `--tail` or `--head`; `--follow` sends bounded IPC frames for the initial retained output and appended output, then reports a clean terminal status. Follow filters apply to the initial snapshot; later output is streamed without head/tail limits.
 
-Log rotation and retention are future configuration features. Their implementation must preserve the ability to inspect historical output associated with a retained record or explicitly state which history was pruned.
+Log rotation and retention are not yet implemented configuration features. Their implementation must preserve the ability to inspect historical output associated with a retained record or explicitly state which history was pruned.
 
-## Future Storage and Logging Options
+## Not Yet Implemented Storage and Logging Options
 
-The MVP deliberately keeps process metadata in SQLite and raw stdout/stderr in append-only files. The following options are candidates for later phases, not current behavior:
+Park currently keeps process metadata in SQLite and raw stdout/stderr in append-only files. The following options are not yet implemented:
 
 - **SQLite metadata plus file indexes:** retain the raw files and add SQLite rows for byte ranges, line offsets, stream sizes, or periodic checkpoints. This improves tailing and search without moving the log payload into the database, but requires index repair after crashes and truncation detection.
 - **SQLite log chunks:** store bounded chunks as `(record_id, sequence_number, stream, captured_at, content BLOB)`. This provides transactional metadata, lossless bytes, and daemon-defined cross-stream ordering, but increases database write volume, database size, backup cost, and reader/writer coordination.
 - **Structured log envelopes:** optionally accept or generate records containing a body, severity, attributes, trace identifiers, and resource information. Raw command output must remain available because Park cannot infer trustworthy fields from arbitrary text.
-- **Timestamp layers:** if structured input supplies an event timestamp, preserve it separately from `observed_at` (when Park read the bytes) and `ingested_at` (when a future collector persisted them). For ordinary process output, Park should not label capture time as the command's event time without documenting that limitation.
+- **Timestamp layers:** if structured input supplies an event timestamp, preserve it separately from `observed_at` (when Park read the bytes) and `ingested_at` (when a collector persists them). For ordinary process output, Park should not label capture time as the command's event time without documenting that limitation.
 - **External or cloud export:** add a collector that batches retained entries to an external backend while keeping local files as the recovery source. This introduces authentication, retry, backpressure, privacy, and retention-policy concerns and is outside Park's local-machine scope.
 - **Retention and compaction:** add size- or age-based rotation, pruning, compression, and optional SQLite vacuuming. Every pruning operation must expose which history was removed and keep the retained process record internally consistent.
 

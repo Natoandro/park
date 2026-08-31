@@ -7,7 +7,7 @@ Use this checklist for recurring reviews of Park changes. Reviewers should focus
 - [ ] The change preserves the primary identity: canonical `(project directory, name)`.
 - [ ] No command silently treats process names as globally unique.
 - [ ] README, architecture documents, and implementation plan accurately describe implemented behavior.
-- [ ] Public commands, aliases, JSON fields, and exit codes are either implemented or clearly documented as deferred.
+- [ ] Public commands, aliases, JSON fields, and exit codes are either implemented or clearly documented as not yet implemented.
 - [ ] Human output remains non-interactive and script-friendly.
 - [ ] JSON output does not expose undocumented persistence internals as a stable API accidentally.
 
@@ -72,5 +72,5 @@ Use this checklist for recurring reviews of Park changes. Reviewers should focus
 ## Review Outcome
 
 - [ ] Findings include severity, file and line reference, failure mode, and a concrete remediation.
-- [ ] Deferred findings are linked to an unchecked implementation-plan item.
+- [ ] Findings about behavior that is not yet implemented are linked to an unchecked implementation-plan item.
 - [ ] Tests or platform limits that could not be covered are called out explicitly.

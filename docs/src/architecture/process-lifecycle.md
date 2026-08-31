@@ -86,14 +86,14 @@ that transition.
 
 ## Platform Limits
 
-The MVP is Unix-first. Linux provides the strongest restart and reconciliation
+Park is Unix-first. Linux provides the strongest restart and reconciliation
 safety because `/proc` exposes the process identity data required for ownership
 checks. Other Unix targets retain the Unix process and IPC interface, but do
 not yet claim equivalent safety across daemon restarts; platform-specific
 identity checks are still needed.
 
-Park does not provide Windows support in the MVP, production service
-supervision, reboot-time automatic restart, or process isolation. Managed
-commands remain ordinary host processes. These limits are deliberate: lifecycle
+Park does not yet support Windows, production service supervision, reboot-time
+automatic restart, or process isolation. Managed commands remain ordinary host
+processes. These limits are deliberate: lifecycle
 operations should not imply ownership or safety guarantees the platform cannot
 verify.

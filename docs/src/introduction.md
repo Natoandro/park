@@ -95,8 +95,8 @@ the stdout and stderr files. The daemon socket, lock, and PID marker are
 ephemeral files under `$XDG_RUNTIME_DIR/park`; when the runtime directory is
 unavailable, Park uses a runtime directory under its durable state directory.
 
-The MVP is Unix-first. Linux provides the strongest process-ownership checks,
+Park is Unix-first. Linux provides the strongest process-ownership checks,
 using `/proc` process start times together with process groups and sessions.
 Other Unix targets retain the Unix interface but do not yet claim equivalent
-process-identity verification across daemon restarts. Windows support is
-deferred.
+process-identity verification across daemon restarts. Windows support is not yet
+implemented.

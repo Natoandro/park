@@ -69,6 +69,10 @@ scripts/bump-version.sh patch
 scripts/bump-version.sh 0.2.0
 ```
 
+The bump script also updates the current package version in
+`docs/src/development.md`, and the version check rejects documentation that is
+out of sync with the workspace.
+
 After committing the version bump, preview and create an annotated release tag
 from the workspace version:
 

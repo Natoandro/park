@@ -82,8 +82,8 @@ client to block capture.
 
 Log rotation, retention, pruning, compression, structured log metadata,
 SQLite-backed log indexes or chunks, and external export are not part of the
-current storage design. Any future history management must state what was
-pruned and keep retained records internally consistent.
+current storage design. If history management is implemented, it must state
+what was pruned and keep retained records internally consistent.
 
 ## Transactions and Recovery
 

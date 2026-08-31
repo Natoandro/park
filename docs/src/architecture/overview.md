@@ -106,5 +106,5 @@ Managed commands are host processes and are not sandboxed or isolated from the
 host filesystem, network, or other OS resources. Containers or virtual machines
 are the appropriate tools when isolation is required.
 
-Optional project configuration and orchestration may be added later, but must
-not displace the configuration-free launch workflow.
+Optional project configuration and orchestration are not yet implemented, and
+must not displace the configuration-free launch workflow.

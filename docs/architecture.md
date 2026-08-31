@@ -54,12 +54,12 @@ Stopping is graceful by default: send SIGTERM to the managed process group, wait
 ## Non-Goals
 
 - Managing production services or requiring root privileges.
-- Restarting user processes automatically after an operating-system reboot in the initial version.
+- Restarting user processes automatically after an operating-system reboot in the current version.
 - Requiring a manifest for routine use.
 - Becoming a container runtime, deployment system, task graph, or general workflow engine.
 
 ## Platform Limit
 
-The MVP is Unix-first, but verified process ownership across daemon restarts currently requires Linux `/proc` identity data. Non-Linux Unix builds do not claim equivalent restart/reconciliation safety until platform-specific identity checks are added.
+Park is Unix-first, but verified process ownership across daemon restarts currently requires Linux `/proc` identity data. Non-Linux Unix builds do not claim equivalent restart/reconciliation safety until platform-specific identity checks are added.
 
-An optional project configuration file can later describe repeatable named processes for `park up` and `park down`, but it must not displace the configuration-free workflow.
+Optional project configuration for repeatable named processes and `park up` / `park down` is not yet implemented, and must not displace the configuration-free workflow.

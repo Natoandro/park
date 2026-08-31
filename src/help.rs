@@ -3,9 +3,9 @@ use serde_json::{Value, json};
 use crate::result::CommandResult;
 
 const SOURCE: &str = "Natoandro/park";
-const PROJECT_INSTALL: &str = "npx skills add Natoandro/park --skill park -a opencode";
-const GLOBAL_INSTALL: &str = "npx skills add Natoandro/park --skill park -g -a opencode";
-const ONE_OFF_USE: &str = "npx skills use Natoandro/park --skill park --agent opencode";
+const PROJECT_INSTALL: &str = "npx skills add Natoandro/park --skill park";
+const GLOBAL_INSTALL: &str = "npx skills add Natoandro/park --skill park -g";
+const ONE_OFF_USE: &str = "npx skills use Natoandro/park --skill park";
 
 pub fn skills_help_result(json_output: bool) -> CommandResult<Value> {
     if json_output {
@@ -16,7 +16,7 @@ pub fn skills_help_result(json_output: bool) -> CommandResult<Value> {
 }
 
 fn skills_guide() -> &'static str {
-    "Park AI agent integration\n\nInstall the canonical skill for OpenCode:\n  Project: npx skills add Natoandro/park --skill park -a opencode\n  Global:  npx skills add Natoandro/park --skill park -g -a opencode\n\nUse it once without installing:\n  npx skills use Natoandro/park --skill park --agent opencode\n\nReplace opencode with another supported agent.\n\nRecommended workflow:\n  1. Run from the project directory associated with the process.\n  2. Inspect records: park ps --json\n  3. Launch: park <name> -- <command> [arguments...]\n  4. Wait for running or readiness output with park wait.\n  5. Diagnose with park status <name> --json and park logs <name>.\n  6. Stop or remove only records belonging to the task.\n\nSkill maintenance:\n  npx skills update park\n  npx skills remove park\n"
+    "Park AI agent integration\n\nInstall the canonical skill:\n  Project: npx skills add Natoandro/park --skill park\n  Global:  npx skills add Natoandro/park --skill park -g\n\nThe default install commands detect available agents and let you choose when\nneeded. To target one agent explicitly, add -a <agent>, for example:\n  npx skills add Natoandro/park --skill park -a opencode\n\nUse it once without installing (prints a prompt):\n  npx skills use Natoandro/park --skill park\n\nTo start a specific supported agent, add --agent <agent>.\n\nRecommended workflow:\n  1. Run from the project directory associated with the process.\n  2. Inspect records: park ps --json\n  3. Launch: park <name> -- <command> [arguments...]\n  4. Wait for running or readiness output with park wait.\n  5. Diagnose with park status <name> --json and park logs <name>.\n  6. Stop or remove only records belonging to the task.\n\nSkill maintenance:\n  npx skills update park\n  npx skills remove park\n"
 }
 
 fn skills_data() -> Value {

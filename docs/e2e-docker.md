@@ -231,7 +231,7 @@ without builder-level locking.
 
 ## Process And Platform Boundaries
 
-The current implementation is Unix-first and uses Linux `/proc`, sessions, and
+The current version is Unix-first and uses Linux `/proc`, sessions, and
 process groups for the strongest ownership checks. The Docker image therefore
 provides the reference environment for process lifecycle stories. Tests that
 exercise daemon crash cleanup, PID identity, descendant termination, or process

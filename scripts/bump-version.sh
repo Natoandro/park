@@ -120,8 +120,31 @@ update_manifest() {
     mv "$temporary" "$manifest"
 }
 
+update_development_version() {
+    document=docs/src/development.md
+    temporary="$document.tmp.$$"
+    awk -v new_version="$new_version" '
+        /current package version is `[0-9]+\.[0-9]+\.[0-9]+`/ && !version_updated {
+            sub(/[0-9]+\.[0-9]+\.[0-9]+/, new_version)
+            version_updated = 1
+        }
+        { print }
+        END {
+            if (!version_updated) {
+                exit 1
+            }
+        }
+    ' "$document" > "$temporary" || {
+        rm -f "$temporary"
+        printf 'could not update %s\n' "$document" >&2
+        exit 1
+    }
+    mv "$temporary" "$document"
+}
+
 update_manifest Cargo.toml
 update_manifest e2e-macros/Cargo.toml
+update_development_version
 
 # Refresh the local package versions in Cargo.lock without changing dependency versions.
 cargo check --workspace --quiet

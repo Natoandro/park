@@ -1,20 +1,32 @@
 # Installation
 
-Park is currently under active development and is not yet published to
-crates.io. The MVP is Unix-only; Windows support is deferred.
+Park is under active development and published through crates.io. Park currently
+supports Unix; Windows is not yet supported.
 
 The Rust package is named `park-cli`, while the installed executable is
 `park`. The project uses Rust Edition 2024 and requires Rust 1.85 or newer.
 
-## Install From GitHub
+## Install From crates.io
 
-Install the latest development version directly from the repository:
+Install the latest published release:
 
 ```bash
-cargo install --git https://github.com/Natoandro/park.git park-cli
+cargo install park-cli
 ```
 
 This installs the `park` executable from the `park-cli` package.
+
+## Try The Latest Development Version
+
+To try the latest version from the `master` branch, install directly from the
+GitHub repository:
+
+```bash
+cargo install --git https://github.com/Natoandro/park.git --branch master park-cli
+```
+
+The `master` build may be unstable and can differ from the latest published
+release.
 
 ## Install A Local Checkout
 
@@ -24,38 +36,35 @@ From the repository root, install the local package with:
 cargo install --path .
 ```
 
-The package uses bundled SQLite, so the MVP does not require a separately
+The package uses bundled SQLite, so Park does not require a separately
 installed system SQLite library for installation.
-
-## After crates.io Publication
-
-After Park is published, the intended crates.io installation command is:
-
-```bash
-cargo install park-cli
-```
-
-That publication has not happened yet, so use the GitHub or local-checkout
-command for now.
 
 ## Install The Agent Skill
 
 Park's agent skill is installed separately from the `park` executable with the
 [`npx skills`](https://skills.sh/) CLI. From a project where the skill should be
-available, install it for OpenCode with:
+available, use the default interactive installation command:
 
 ```bash
-npx skills add Natoandro/park --skill park -a opencode
+npx skills add Natoandro/park --skill park
 ```
 
-Use `-g` for a global installation, or use the skill once without installing it:
+The CLI detects available agents and lets you choose when needed. Use `-g` for a
+global installation:
 
 ```bash
-npx skills add Natoandro/park --skill park -g -a opencode
-npx skills use Natoandro/park --skill park --agent opencode
+npx skills add Natoandro/park --skill park -g
 ```
 
-Replace `opencode` with another supported agent. See [AI Agent
+To target a specific agent, add `-a <agent>`, such as `-a opencode`. Use the
+skill once without installing it with:
+
+```bash
+npx skills use Natoandro/park --skill park
+```
+
+This prints a prompt; add `--agent <agent>` to start a specific supported agent.
+See [AI Agent
 Integration](ai-agents.md) for the recommended agent workflow and skill
 maintenance commands.
 

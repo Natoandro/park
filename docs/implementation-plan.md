@@ -1,12 +1,12 @@
 # Implementation Plan
 
-This proposed Unix-first Rust MVP preserves Park's public invariants: project-scoped identity, terminal-independent processes, durable separate logs, and script-friendly lifecycle control. Phase 0 records the Unix-only platform and toolchain decisions. Each phase ends with focused checks before the next phase begins.
+This proposed Unix-first Rust project preserves Park's public invariants: project-scoped identity, terminal-independent processes, durable separate logs, and script-friendly lifecycle control. Phase 0 records the Unix-only platform and toolchain decisions. Each phase ends with focused checks before the next phase begins.
 
 ## Phase 0: Foundation Decisions
 
 Phase 0 establishes the platform, toolchain, and dependency policy before implementation. Do not add a dependency until its use is approved. `clap`, `serde`, and `serde_json` are conventional CLI/serialization dependencies; all other third-party crates require explicit approval before they appear in `Cargo.toml`.
 
-- [x] Confirm the initial supported platform: Unix-only MVP.
+- [x] Confirm the current supported platform: Unix-only.
 - [x] Confirm the Rust toolchain policy: Edition 2024 and MSRV 1.85.
 - [x] Approve the async/process strategy: Tokio.
 - [x] Approve the persistence strategy: SQLite process metadata with append-only log files.
@@ -15,13 +15,13 @@ Phase 0 establishes the platform, toolchain, and dependency policy before implem
 
 Recorded decisions:
 
-- Initial platform: Unix-only MVP; Windows support is deferred.
+- Current platform: Unix-only; Windows support is not yet implemented.
 - Toolchain: Edition 2024 with MSRV 1.85.
-- Async runtime and local IPC: `tokio`; synchronous threads and standard-library sockets were rejected for the MVP.
+- Async runtime and local IPC: `tokio`; synchronous threads and standard-library sockets were rejected for the current version.
 - Durable metadata: SQLite backed by `rusqlite`; process output remains in separate append-only files.
 - Unix process groups, signals, and advisory locking: `nix`; internal FFI and a separate `fs2` dependency were rejected.
 - Errors: `thiserror`; `anyhow` and fully internal error types were rejected in favor of typed stable outcomes.
-- Time: epoch timestamps with internal formatting; `time` and `chrono` were rejected for the MVP.
+- Time: epoch timestamps with internal formatting; `time` and `chrono` were rejected for the current version.
 - SQLite: bundled `rusqlite`; system SQLite linking was rejected to avoid an installation-time system dependency.
 
 ## Phase 1: Workspace and Public Contract
@@ -61,7 +61,7 @@ Phase 2 implementation decisions:
 - `ProjectPath` is constructed only from canonicalized existing directories. The current working directory is resolved directly; Git-root discovery is not performed.
 - `ProcessKey` owns the canonical `ProjectPath` and opaque process name. Registry access accepts only a complete `ProcessKey`, never a name alone.
 - New records begin in `starting`; valid transitions cover successful startup, graceful stopping, natural failure, and forceful termination. Terminal states cannot transition further.
-- The in-memory registry rejects duplicate canonical keys while allowing identical names under distinct project paths. Durable storage is deferred to Phase 3.
+- The in-memory registry rejects duplicate canonical keys while allowing identical names under distinct project paths. Durable storage was implemented in Phase 3.
 
 ## Phase 3: State Layout and Persistence
 
@@ -85,7 +85,7 @@ Phase 3 implementation decisions:
   updates, and keeps the database private to the user.
 - Every record load validates lifecycle fields, working-directory/key consistency, SQLite identity columns, and derived log paths before it is listed, reconciled, or removed.
 - Log files are created independently with exclusive creation before a record is persisted. Terminal records and logs remain until explicit removal.
-- Reconciliation accepts an injected liveness check so platform-specific PID and process-group ownership checks can be added with the daemon in later phases.
+- Reconciliation accepts an injected liveness check; platform-specific PID and process-group ownership checks are not yet implemented for all supported Unix platforms.
 
 ## Phase 4: Daemon Ownership and Local IPC
 
@@ -148,7 +148,7 @@ Phase 6 implementation decisions:
 - `ps` and `status` reconcile active records against verified process identity before reading them. `ps` sorts names by their raw Unix argument bytes, preserving deterministic ordering for non-UTF-8 names.
 - Log JSON data uses stable `stream`, `content`, and `state` fields. Content is returned as UTF-8 with replacement for invalid bytes; the durable files retain the original bytes.
 - Combined output is stdout followed by stderr. This is deterministic but does not claim to reconstruct cross-stream event timing.
-- `--grep` is a literal substring filter applied line-by-line before `--head` or `--tail`. Regex search is deferred rather than adding another dependency.
+- `--grep` is a literal substring filter applied line-by-line before `--head` or `--tail`. Regex search is not yet implemented; adding it would require another dependency.
 - Log responses use bounded newline-delimited JSON frames. Follow emits the initial snapshot and appended content, then a terminal frame containing the observed state. Initial head/tail/filter options apply to the retained snapshot; subsequent follow content is not head/tail limited.
 
 ## Phase 7: Lifecycle Control
@@ -166,7 +166,7 @@ Phase 6 implementation decisions:
 Phase 7 implementation decisions:
 
 - `stop` uses a two-second grace period. The default sends SIGTERM to the verified process group; `--force` skips directly to SIGKILL. Both operations wait for the monitor to persist a terminal result.
-- Supported named signals are HUP, INT, QUIT, TERM, USR1, USR2, STOP, CONT, and KILL, with an optional `SIG` prefix. Numeric signal parsing is deferred because it was not approved for this phase.
+- Supported named signals are HUP, INT, QUIT, TERM, USR1, USR2, STOP, CONT, and KILL, with an optional `SIG` prefix. Numeric signal parsing is not yet implemented because it was not approved for this phase.
 - A per-key daemon lock serializes launch, stop, signal, restart, start, remove, and clean mutations. Monitor writes carry the spawned PID and ignore stale terminal updates after a later start attempt.
 - Restart stops a running record before reusing its recorded command. Start is limited to terminal records. Both reset the current lifecycle fields and append output to the existing stdout and stderr logs.
 - `rm` refuses active records or a still-present recorded process group and deletes metadata plus logs unless `--keep-logs` is set. `clean` removes terminal records with no remaining process group across the user's Park state and never removes active records.
@@ -190,7 +190,7 @@ Phase 8 implementation decisions:
 - Linux ownership checks validate PID start time, process group, and session. Descendant-only groups are recognized by matching the recorded group/session, while a reused bare group ID is not trusted. Non-Linux Unix ownership verification remains a documented limitation.
 - IPC request reads and response writes have finite deadlines. Capture tasks remain independent of IPC clients.
 
-## Post-MVP Roadmap
+## Roadmap
 
 The following milestones are ordered by priority. Each feature must preserve the
 configuration-free launch form and the existing project/name identity.
@@ -239,13 +239,13 @@ configuration-free launch form and the existing project/name identity.
    Consider Git-root resolution as an explicit policy, never as an implicit
    change to invocation-directory scoping.
 
-Process isolation and sandboxing are not planned as Park core features. Park
+Process isolation and sandboxing are not supported by Park's core design. Park
 should continue to manage ordinary host processes; users requiring filesystem,
 network, or resource isolation should use containers or virtual machines.
 
 ## Approved Dependencies
 
-Approved for the MVP. Use the latest release compatible with the MSRV unless a phase records a narrower version requirement.
+Approved for the current version. Use the latest release compatible with the MSRV unless a phase records a narrower version requirement.
 
 - [x] `clap`: conventional CLI argument parsing and subcommand boundaries.
 - [x] `serde`: conventional structured data serialization for persisted records and IPC payloads.
@@ -253,7 +253,7 @@ Approved for the MVP. Use the latest release compatible with the MSRV unless a p
 - [x] `tokio`: asynchronous local IPC, child-process monitoring, timers, and independent output draining.
 - [x] `nix`: Unix process groups, signals, and kernel-managed advisory daemon locking.
 - [x] `thiserror`: typed internal errors with stable machine-readable classification and exit-code mapping.
-- [x] `rusqlite`: SQLite process metadata and transactional lifecycle persistence; the bundled feature avoids a system SQLite dependency. A JSON-file registry was rejected because concurrent lifecycle mutations and registry queries are core MVP behavior.
-- [ ] `fs2`: rejected for the MVP; advisory locking is provided through `nix`.
-- [ ] `anyhow`: rejected for the MVP; typed errors are required at public command boundaries.
-- [ ] `time` / `chrono`: rejected for the MVP; timestamps are persisted as epochs with internal formatting.
+- [x] `rusqlite`: SQLite process metadata and transactional lifecycle persistence; the bundled feature avoids a system SQLite dependency. A JSON-file registry was rejected because concurrent lifecycle mutations and registry queries are core behavior in the current version.
+- [ ] `fs2`: rejected for the current version; advisory locking is provided through `nix`.
+- [ ] `anyhow`: rejected for the current version; typed errors are required at public command boundaries.
+- [ ] `time` / `chrono`: rejected for the current version; timestamps are persisted as epochs with internal formatting.
