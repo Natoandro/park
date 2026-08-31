@@ -18,7 +18,7 @@ jobs:
     environment: crates-io
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust
         run: >-

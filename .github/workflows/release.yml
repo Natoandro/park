@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust
         run: >-
@@ -44,7 +44,7 @@ jobs:
             "park-${RELEASE_TAG}-${target}"
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: park-binary
           path: dist/*.tar.gz
@@ -58,7 +58,7 @@ jobs:
       contents: write
     steps:
       - name: Download binary artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: park-binary
           path: dist
