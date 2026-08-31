@@ -78,9 +78,12 @@ scripts/tag-version.sh --push
 ```
 
 The tag script checks that all workspace package versions match, requires a
-clean worktree, and refuses to overwrite an existing tag. By default it creates
-the tag locally; `--push` also pushes it to `origin`. `--dry-run` performs no
-Git mutations and can be combined with either mode.
+clean worktree on `master` synchronized with `origin/master`, and verifies that
+the GitHub Actions `Test` workflow passed for that exact commit. It also refuses
+to overwrite an existing tag. The script requires an authenticated `gh` CLI.
+By default it creates the tag locally; `--push` also pushes it to `origin`.
+`--dry-run` performs no Git mutations and can be combined with either mode, but
+still performs every preflight check.
 
 Pushing a `v*` tag starts the `release.yml` workflow. It runs the reusable
 `Test` workflow first. Only after all checks succeed do the binary release,

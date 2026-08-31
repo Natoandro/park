@@ -77,7 +77,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          gh release create "$GITHUB_REF_NAME" dist/*
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" dist/*
           --title "Park $GITHUB_REF_NAME" --generate-notes
 
   publish:
