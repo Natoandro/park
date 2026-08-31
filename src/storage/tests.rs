@@ -30,12 +30,7 @@ impl Drop for TempDir {
 
 fn test_storage() -> (TempDir, Storage, ProjectPath) {
     let root = TempDir::new();
-    let paths = StoragePaths::from_environment(&XdgEnvironment {
-        state_home: Some(root.path().join("state")),
-        runtime_dir: Some(root.path().join("runtime")),
-        home: None,
-    })
-    .expect("explicit XDG paths should resolve");
+    let paths = test_paths(&root);
     let storage = Storage::new(paths);
     storage
         .paths()
@@ -46,6 +41,15 @@ fn test_storage() -> (TempDir, Storage, ProjectPath) {
     fs::create_dir(&project_dir).expect("project directory should be created");
     let project = resolve_project(project_dir).expect("project should resolve");
     (root, storage, project)
+}
+
+fn test_paths(root: &TempDir) -> StoragePaths {
+    StoragePaths::from_environment(&XdgEnvironment {
+        state_home: Some(root.path().join("state")),
+        runtime_dir: Some(root.path().join("runtime")),
+        home: None,
+    })
+    .expect("explicit XDG paths should resolve")
 }
 
 fn record(storage: &Storage, project: &ProjectPath, name: OsString) -> ProcessRecord {
@@ -148,6 +152,38 @@ fn round_trips_exact_non_utf8_process_arguments() {
     assert_eq!(loaded.key(), &key);
     assert_eq!(loaded.executable().as_bytes(), &[b's', 0xfe]);
     assert_eq!(loaded.arguments()[0].as_bytes(), &[b'a', 0xfd]);
+}
+
+#[test]
+fn stores_records_in_normalized_tables() {
+    let (_root, storage, project) = test_storage();
+    let record = record(&storage, &project, OsString::from("dev"));
+    storage
+        .create_record(&record)
+        .expect("record should be persisted");
+
+    let connection =
+        rusqlite::Connection::open(storage.paths().database_path()).expect("database should open");
+    let columns = connection
+        .prepare("SELECT name FROM pragma_table_info('process_records')")
+        .expect("record schema should be inspectable")
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("record columns should be readable")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("record columns should load");
+    assert!(columns.contains(&"executable".to_owned()));
+    let version: i32 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("schema version should be readable");
+    assert_eq!(version, 1);
+    let argument_count: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM process_arguments WHERE key_digest = ?1",
+            rusqlite::params![files::key_digest(record.key())],
+            |row| row.get(0),
+        )
+        .expect("argument rows should be countable");
+    assert_eq!(argument_count, 1);
 }
 
 #[test]
@@ -282,8 +318,8 @@ fn reconciles_dead_active_records_without_discarding_logs() {
 }
 
 #[test]
-fn rejects_a_record_with_external_log_paths_before_removal() {
-    let (root, storage, project) = test_storage();
+fn rejects_a_record_with_invalid_stored_fields() {
+    let (_root, storage, project) = test_storage();
     let mut record = record(&storage, &project, OsString::from("dev"));
     record
         .mark_spawn_failed(11, "could not start")
@@ -291,21 +327,12 @@ fn rejects_a_record_with_external_log_paths_before_removal() {
     storage
         .create_record(&record)
         .expect("record should be created");
-    let external_log = root.path().join("outside.log");
-    fs::write(&external_log, b"must remain").expect("external log should exist");
-
     let path = storage.paths().database_path();
-    let mut value: serde_json::Value =
-        serde_json::to_value(&record).expect("record should serialize");
-    value["logs"]["stdout"] = serde_json::json!(external_log);
     let connection = rusqlite::Connection::open(path).expect("database should open");
     connection
         .execute(
-            "UPDATE process_records SET record_json = ?1 WHERE key_digest = ?2",
-            rusqlite::params![
-                serde_json::to_vec(&value).expect("record should serialize"),
-                files::key_digest(record.key()),
-            ],
+            "UPDATE process_records SET executable = ?1 WHERE key_digest = ?2",
+            rusqlite::params![b"".as_slice(), files::key_digest(record.key())],
         )
         .expect("record should be corrupted");
 
@@ -313,10 +340,6 @@ fn rejects_a_record_with_external_log_paths_before_removal() {
         storage.remove_record(record.key(), false),
         Err(StorageError::InvalidRecordInvariant { .. })
     ));
-    assert_eq!(
-        fs::read(&external_log).expect("external log should remain"),
-        b"must remain"
-    );
 }
 
 #[test]

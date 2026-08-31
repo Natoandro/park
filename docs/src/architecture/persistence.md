@@ -50,6 +50,17 @@ locations before a record can be listed, reconciled, or removed.
 The exact argument vector is authoritative. A human-readable command string is
 only derived presentation data and is never used to reconstruct a restart.
 
+The current SQLite schema is version 1, recorded with SQLite's
+`PRAGMA user_version`. The normalized tables are:
+
+- `process_records` stores the process key, executable, lifecycle identifiers,
+  timestamps, state, exit information, and failure reason as individual fields.
+- `process_arguments` stores one raw argument BLOB per zero-based position,
+  keyed by the process record digest.
+
+The working directory and stdout/stderr log paths are derived from the canonical
+process key and are not duplicated in SQLite.
+
 ## Logs
 
 Standard output and standard error are stored in separate append-only files.

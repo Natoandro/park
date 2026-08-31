@@ -33,6 +33,17 @@ impl FromStr for ProcessState {
 }
 
 impl ProcessState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Stopping => "stopping",
+            Self::Exited => "exited",
+            Self::Failed => "failed",
+            Self::Killed => "killed",
+        }
+    }
+
     pub const fn is_terminal(self) -> bool {
         matches!(self, Self::Exited | Self::Failed | Self::Killed)
     }

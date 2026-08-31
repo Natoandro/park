@@ -17,6 +17,23 @@ pub struct ProcessKey {
     name: OsString,
 }
 
+pub(crate) struct ProcessRecordParts {
+    pub key: ProcessKey,
+    pub executable: OsString,
+    pub arguments: Vec<OsString>,
+    pub pid: Option<u32>,
+    pub process_group_id: Option<u32>,
+    pub process_start_time: Option<u64>,
+    pub created_at: EpochSeconds,
+    pub started_at: Option<EpochSeconds>,
+    pub exited_at: Option<EpochSeconds>,
+    pub state: ProcessState,
+    pub exit_code: Option<i32>,
+    pub termination_signal: Option<i32>,
+    pub failure_reason: Option<String>,
+    pub logs: LogPaths,
+}
+
 impl ProcessKey {
     pub fn new(project_path: ProjectPath, name: OsString) -> Self {
         Self { project_path, name }
@@ -86,6 +103,46 @@ impl ProcessRecord {
             failure_reason: None,
             logs,
         }
+    }
+
+    pub(crate) fn from_storage(
+        parts: ProcessRecordParts,
+    ) -> Result<Self, ProcessRecordValidationError> {
+        let ProcessRecordParts {
+            key,
+            executable,
+            arguments,
+            pid,
+            process_group_id,
+            process_start_time,
+            created_at,
+            started_at,
+            exited_at,
+            state,
+            exit_code,
+            termination_signal,
+            failure_reason,
+            logs,
+        } = parts;
+        let record = Self {
+            working_directory: key.project_path().to_path_buf(),
+            key,
+            executable,
+            arguments,
+            pid,
+            process_group_id,
+            process_start_time,
+            created_at,
+            started_at,
+            exited_at,
+            state,
+            exit_code,
+            termination_signal,
+            failure_reason,
+            logs,
+        };
+        record.validate()?;
+        Ok(record)
     }
 
     pub fn key(&self) -> &ProcessKey {

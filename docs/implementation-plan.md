@@ -79,7 +79,10 @@ Phase 3 implementation decisions:
 
 - Durable state uses `$XDG_STATE_HOME/park`, falling back to `$HOME/.local/state/park`. Runtime state uses `$XDG_RUNTIME_DIR/park`, falling back to a private `runtime/park` directory under the durable state directory.
 - Process metadata is stored in `$XDG_STATE_HOME/park/park.sqlite3` (or the documented fallback), while logs remain under its `logs` directory. SQLite identity columns use lossless Unix BLOB values for canonical project paths and opaque names.
-- SQLite creates a unique `(project_path, name)` index and stores the serialized process record alongside those identity columns. SQLite's journal provides atomic record updates; the database is private to the user.
+- SQLite schema version 1 stores scalar process metadata in normalized columns,
+  with ordered raw command arguments in a child table. It creates a unique
+  `(project_path, name)` index, uses SQLite transactions for atomic record
+  updates, and keeps the database private to the user.
 - Every record load validates lifecycle fields, working-directory/key consistency, SQLite identity columns, and derived log paths before it is listed, reconciled, or removed.
 - Log files are created independently with exclusive creation before a record is persisted. Terminal records and logs remain until explicit removal.
 - Reconciliation accepts an injected liveness check so platform-specific PID and process-group ownership checks can be added with the daemon in later phases.
