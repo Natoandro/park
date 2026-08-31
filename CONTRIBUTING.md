@@ -69,6 +69,19 @@ scripts/bump-version.sh patch
 scripts/bump-version.sh 0.2.0
 ```
 
+After committing the version bump, preview and create an annotated release tag
+from the workspace version:
+
+```bash
+scripts/tag-version.sh --dry-run
+scripts/tag-version.sh --push
+```
+
+The tag script checks that all workspace package versions match, requires a
+clean worktree, and refuses to overwrite an existing tag. By default it creates
+the tag locally; `--push` also pushes it to `origin`. `--dry-run` performs no
+Git mutations and can be combined with either mode.
+
 Pushing a `v*` tag starts the `release.yml` workflow. It runs the reusable
 `Test` workflow first. Only after all checks succeed do the binary release,
 crates.io publication, and documentation deployment jobs start in parallel:
