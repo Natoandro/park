@@ -40,7 +40,7 @@ jobs:
           mkdir -p "$staging"
           install -Dm755 target/release/park "$staging/park"
           cp LICENSE README.md "$staging/"
-          tar -C dist -czf "park-${RELEASE_TAG}-${target}.tar.gz" \
+          tar -czf "dist/park-${RELEASE_TAG}-${target}.tar.gz" -C dist \
             "park-${RELEASE_TAG}-${target}"
 
       - name: Upload binary artifact

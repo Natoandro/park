@@ -69,11 +69,13 @@ scripts/bump-version.sh patch
 scripts/bump-version.sh 0.2.0
 ```
 
-Pushing a `v*` tag currently starts two GitHub Actions workflows:
+Pushing a `v*` tag starts two GitHub Actions workflows:
 
 - `release.yml` builds and publishes the Linux `x86_64-unknown-linux-gnu`
   binary as a GitHub release asset with checksums.
 - `publish.yml` publishes the workspace packages to crates.io.
 
-There is not yet a GitHub Actions workflow that deploys the mdBook to GitHub
-Pages. Documentation can be built and reviewed locally with the commands above.
+The `docs.yml` workflow builds the mdBook and deploys it to GitHub Pages when
+documentation changes land on `master`.
+
+Documentation can be built and reviewed locally with the commands above.

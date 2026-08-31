@@ -25,6 +25,10 @@ jobs:
           rustup toolchain install "$RUST_VERSION" --profile minimal
           --no-self-update
 
+      - name: Install current stable Rust
+        run: >-
+          rustup toolchain install stable --profile minimal --no-self-update
+
       - name: Check release tag version
         run: ./scripts/check-version.sh "$GITHUB_REF_NAME"
 
@@ -32,4 +36,4 @@ jobs:
       - name: Publish packages
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo "+$RUST_VERSION" publish --workspace --locked
+        run: cargo +stable publish --workspace --locked
