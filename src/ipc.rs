@@ -30,9 +30,9 @@ pub enum IpcOperation {
     Ping,
     Launch {
         project_path: ProjectPath,
-        #[serde(with = "os_string_serde")]
+        #[serde(with = "crate::os_string")]
         name: OsString,
-        #[serde(with = "os_string_vec_serde")]
+        #[serde(with = "crate::os_string::vec")]
         command: Vec<OsString>,
     },
     Ps {
@@ -420,79 +420,6 @@ pub enum IpcError {
     Deserialize(#[source] serde_json::Error),
     #[error("invalid IPC protocol message: {0}")]
     Protocol(String),
-}
-
-mod os_string_serde {
-    use super::*;
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
-
-    pub fn serialize<S>(value: &OsString, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&encode_hex(value.as_bytes()))
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<OsString, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        decode_hex(&value)
-            .map(OsString::from_vec)
-            .map_err(serde::de::Error::custom)
-    }
-
-    pub(super) fn encode_hex(bytes: &[u8]) -> String {
-        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-    }
-
-    pub(super) fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
-        if value.len() % 2 != 0 {
-            return Err("encoded OS string has odd length".to_owned());
-        }
-        (0..value.len())
-            .step_by(2)
-            .map(|index| {
-                u8::from_str_radix(&value[index..index + 2], 16)
-                    .map_err(|_| "invalid hexadecimal OS string".to_owned())
-            })
-            .collect()
-    }
-}
-
-mod os_string_vec_serde {
-    use super::*;
-
-    pub fn serialize<S>(values: &[OsString], serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        values
-            .iter()
-            .map(|value| {
-                use std::os::unix::ffi::OsStrExt;
-                os_string_serde::encode_hex(value.as_bytes())
-            })
-            .collect::<Vec<_>>()
-            .serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<OsString>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let values = Vec::<String>::deserialize(deserializer)?;
-        values
-            .into_iter()
-            .map(|value| {
-                use std::os::unix::ffi::OsStringExt;
-                os_string_serde::decode_hex(&value)
-                    .map(OsString::from_vec)
-                    .map_err(serde::de::Error::custom)
-            })
-            .collect()
-    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_contains, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_contains, expect_success, hex, parse_json};
 
 #[e2e(
     story = "PARK-CLI-002",
@@ -86,8 +86,4 @@ pub fn preserve_exact_managed_command() -> Result<(), String> {
     }
     expect_contains(&String::from_utf8_lossy(&logs.stdout), "$(printf not-interpreted)")?;
     Ok(())
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

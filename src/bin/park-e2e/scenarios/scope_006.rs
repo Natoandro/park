@@ -6,7 +6,7 @@ use std::process::{Command, Output};
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_success, hex, parse_json};
 
 #[e2e(
     story = "PARK-SCOPE-006",
@@ -119,8 +119,4 @@ fn run(
     command
         .output()
         .map_err(|error| format!("execute non-UTF-8 Park command: {error}"))
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

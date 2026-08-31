@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -180,4 +181,12 @@ pub fn expect_contains(value: &str, expected: &str) -> Result<(), String> {
         return Ok(());
     }
     Err(format!("expected {expected:?} in {value:?}"))
+}
+
+pub fn hex(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
 }

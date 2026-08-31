@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_contains, expect_success};
+use super::super::support::{TestEnvironment, expect_contains, expect_success, hex};
 
 #[e2e(
     story = "PARK-INSPECT-003",
@@ -49,8 +49,4 @@ fn expect_human_status(operation: &str, output: &std::process::Output) -> Result
         ));
     }
     Ok(())
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

@@ -1,7 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::lifecycle::{InvalidStateTransition, ProcessState};
@@ -13,7 +13,7 @@ pub type EpochSeconds = u64;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProcessKey {
     project_path: ProjectPath,
-    #[serde(with = "os_string_serde")]
+    #[serde(with = "crate::os_string")]
     name: OsString,
 }
 
@@ -41,9 +41,9 @@ pub struct LogPaths {
 pub struct ProcessRecord {
     key: ProcessKey,
     working_directory: PathBuf,
-    #[serde(with = "os_string_serde")]
+    #[serde(with = "crate::os_string")]
     executable: OsString,
-    #[serde(with = "os_string_vec_serde")]
+    #[serde(with = "crate::os_string::vec")]
     arguments: Vec<OsString>,
     pid: Option<u32>,
     process_group_id: Option<u32>,
@@ -355,74 +355,4 @@ pub enum ProcessRecordValidationError {
     TerminationSignal,
     #[error("non-killed record has a termination signal")]
     UnexpectedTerminationSignal,
-}
-
-mod os_string_serde {
-    use super::*;
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
-
-    pub fn serialize<S>(value: &OsString, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&encode_hex(value.as_bytes()))
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<OsString, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        decode_hex(&value)
-            .map(OsString::from_vec)
-            .map_err(serde::de::Error::custom)
-    }
-
-    pub(super) fn encode_hex(bytes: &[u8]) -> String {
-        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-    }
-
-    pub(super) fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
-        if value.len() % 2 != 0 {
-            return Err("encoded OS string has odd length".to_owned());
-        }
-        (0..value.len())
-            .step_by(2)
-            .map(|index| {
-                u8::from_str_radix(&value[index..index + 2], 16)
-                    .map_err(|_| "invalid hexadecimal OS string".to_owned())
-            })
-            .collect()
-    }
-}
-
-mod os_string_vec_serde {
-    use super::*;
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
-
-    pub fn serialize<S>(values: &[OsString], serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let encoded = values
-            .iter()
-            .map(|value| os_string_serde::encode_hex(value.as_bytes()))
-            .collect::<Vec<_>>();
-        encoded.serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<OsString>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let values = Vec::<String>::deserialize(deserializer)?;
-        values
-            .into_iter()
-            .map(|value| {
-                os_string_serde::decode_hex(&value)
-                    .map(OsString::from_vec)
-                    .map_err(serde::de::Error::custom)
-            })
-            .collect()
-    }
 }

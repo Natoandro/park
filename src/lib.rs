@@ -4,6 +4,7 @@ mod daemon;
 mod help;
 mod ipc;
 mod lifecycle;
+pub(crate) mod os_string;
 mod process;
 mod project;
 mod registry;

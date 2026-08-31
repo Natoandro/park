@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_success, hex, parse_json};
 
 #[e2e(
     story = "PARK-INSPECT-002",
@@ -72,8 +72,4 @@ fn ps_names(json: &serde_json::Value) -> Result<Vec<String>, String> {
                 .ok_or_else(|| format!("ps record has no encoded name: {record}"))
         })
         .collect()
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
