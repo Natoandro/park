@@ -55,8 +55,12 @@ The current SQLite schema is version 1, recorded with SQLite's
 
 - `process_records` stores the process key, executable, lifecycle identifiers,
   timestamps, state, exit information, and failure reason as individual fields.
+  The current `name` column remains a `BLOB` even though process names are ASCII.
 - `process_arguments` stores one raw argument BLOB per zero-based position,
   keyed by the process record digest.
+
+Storing process names as SQLite `TEXT` is not yet implemented and is tracked on
+the [roadmap](../../implementation-plan.md#roadmap).
 
 The working directory and stdout/stderr log paths are derived from the canonical
 process key and are not duplicated in SQLite.

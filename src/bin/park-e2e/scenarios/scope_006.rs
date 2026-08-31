@@ -15,9 +15,9 @@ use super::super::support::{TestEnvironment, expect_success, parse_json};
     description = "Preserve non-UTF-8 command arguments across restart",
     tags = ["scope", "unix", "arguments"]
 )]
-pub fn preserve_non_utf8_names_and_arguments() -> Result<(), String> {
+pub fn preserve_non_utf8_command_arguments() -> Result<(), String> {
     let environment = TestEnvironment::new("PARK-SCOPE-006")?;
-    let name = OsString::from("opaque-name");
+    let name = OsString::from("process-name");
     let argument = OsString::from_vec(b"argument-\x80-\xff".to_vec());
     let command = vec![
         OsString::from("/bin/sh"),

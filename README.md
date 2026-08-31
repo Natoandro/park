@@ -170,7 +170,7 @@ park help --skills [--json]
 
 Without `--stdout` or `--stderr`, logs are combined deterministically as stdout followed by stderr. `--grep` performs a literal substring search on retained lines before `--head` or `--tail` is applied; regular expressions are not supported. With `--follow`, the initial retained output honors these filters and subsequent output is streamed as it is appended.
 
-The operation subcommands also accept long-option aliases such as `park --status dev`, while the readable subcommand form remains canonical. The `--` separator marks the start of the managed command and its arguments. New process names must contain only ASCII letters, digits, `.`, `_`, `-`, and `:`. Names remain project-scoped, and Park does not reserve operation words, so names such as `status` and `--status` are valid when used in the launch form, for example `park status -- ./server`.
+The operation subcommands also accept long-option aliases such as `park --status dev`, while the readable subcommand form remains canonical. The `--` separator marks the start of the managed command and its arguments. Process names must contain only ASCII letters, digits, `.`, `_`, `-`, and `:`. Names remain project-scoped, and Park does not reserve operation words, so names such as `status` and `--status` are valid when used in the launch form, for example `park status -- ./server`.
 
 ## Exit Codes
 

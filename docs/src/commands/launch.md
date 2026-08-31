@@ -29,7 +29,7 @@ a shell command, so shell syntax is not interpreted by Park.
 
 ## Names
 
-New process names must contain only ASCII letters, digits, `.`, `_`, `-`, and
+Process names must contain only ASCII letters, digits, `.`, `_`, `-`, and
 `:`, with no whitespace. They are not globally unique, and Park does not reserve
 operation words. A name is available again only after its record is removed;
 launching the same name in the same project returns a duplicate-record result.

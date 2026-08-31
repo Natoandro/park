@@ -59,7 +59,7 @@ Phase 1 syntax decisions:
 Phase 2 implementation decisions:
 
 - `ProjectPath` is constructed only from canonicalized existing directories. The current working directory is resolved directly; Git-root discovery is not performed.
-- `ProcessKey` owns the canonical `ProjectPath` and process name. New process names use ASCII letters, digits, `.`, `_`, `-`, and `:`. Registry access accepts only a complete `ProcessKey`, never a name alone.
+- `ProcessKey` owns the canonical `ProjectPath` and process name. Process names use ASCII letters, digits, `.`, `_`, `-`, and `:`. Registry access accepts only a complete `ProcessKey`, never a name alone.
 - New records begin in `starting`; valid transitions cover successful startup, graceful stopping, natural failure, and forceful termination. Terminal states cannot transition further.
 - The in-memory registry rejects duplicate canonical keys while allowing identical names under distinct project paths. Durable storage was implemented in Phase 3.
 
@@ -243,6 +243,10 @@ configuration-free launch form and the existing project/name identity.
    daemon without interrupting managed process groups. Preserve socket and lock
    ownership and supervisor relationships during the handoff, and reject
    incompatible upgrades safely.
+- [ ] **13. Store process names as text**
+   Migrate the SQLite process-name column from `BLOB` to `TEXT` now that process
+   names use a restricted ASCII character set. Keep the current BLOB schema until
+   the migration and compatibility behavior are defined.
 
 Process isolation and sandboxing are not supported by Park's core design. Park
 should continue to manage ordinary host processes; users requiring filesystem,

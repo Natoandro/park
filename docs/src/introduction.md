@@ -46,7 +46,7 @@ are not global across the user's projects:
 ~/code/api  + dev  -> another record
 ```
 
-New process names must contain only ASCII letters, digits, `.`, `_`, `-`, and
+Process names must contain only ASCII letters, digits, `.`, `_`, `-`, and
 `:`, with no whitespace.
 
 Park canonicalizes the invocation directory for lookups and creation. This
