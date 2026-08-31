@@ -1,4 +1,4 @@
-name: Release binaries
+name: Release
 
 on:
   push:
@@ -12,8 +12,15 @@ env:
   RUST_VERSION: 1.85.0
 
 jobs:
+  checks:
+    name: Release checks
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   build:
     name: Build binary
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -72,3 +79,72 @@ jobs:
         run: >-
           gh release create "$GITHUB_REF_NAME" dist/*
           --title "Park $GITHUB_REF_NAME" --generate-notes
+
+  publish:
+    name: Publish crates.io packages
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: >-
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          --no-self-update
+
+      - name: Install current stable Rust
+        run: >-
+          rustup toolchain install stable --profile minimal --no-self-update
+
+      - name: Check release tag version
+        run: ./scripts/check-version.sh "$GITHUB_REF_NAME"
+
+      # Configure CARGO_REGISTRY_TOKEN as a repository or environment secret.
+      - name: Publish packages
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo +stable publish --workspace --locked
+
+  docs-build:
+    name: Build documentation
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Install mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: "0.4.52"
+
+      - name: Build documentation
+        run: mdbook build docs
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/book
+
+  docs-deploy:
+    name: Deploy documentation
+    needs: docs-build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v5
