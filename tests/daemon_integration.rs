@@ -157,12 +157,13 @@ fn launches_captures_both_streams_and_retains_the_terminal_record() {
         "printf stdout; printf stderr >&2",
     ]);
     assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
-    let launched: Value =
-        serde_json::from_slice(&launch.stdout).expect("launch data should be JSON");
-    let stdout_path = launched["logs"]["stdout"]
+    let status = environment.run(&["status", "streams", "--json"]);
+    assert!(status.status.success(), "stderr: {:?}", status.stderr);
+    let record: Value = serde_json::from_slice(&status.stdout).expect("status data should be JSON");
+    let stdout_path = record["data"]["logs"]["stdout"]
         .as_str()
         .expect("stdout path should be returned");
-    let stderr_path = launched["logs"]["stderr"]
+    let stderr_path = record["data"]["logs"]["stderr"]
         .as_str()
         .expect("stderr path should be returned");
     assert_eq!(wait_for_state(&environment, "streams"), "exited");
@@ -254,9 +255,10 @@ fn drains_large_output_without_blocking_the_child() {
         "head -c 200000 /dev/zero",
     ]);
     assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
-    let launched: Value =
-        serde_json::from_slice(&launch.stdout).expect("launch data should be JSON");
-    let stdout_path = launched["logs"]["stdout"]
+    let status = environment.run(&["status", "large-output", "--json"]);
+    assert!(status.status.success(), "stderr: {:?}", status.stderr);
+    let record: Value = serde_json::from_slice(&status.stdout).expect("status data should be JSON");
+    let stdout_path = record["data"]["logs"]["stdout"]
         .as_str()
         .expect("stdout path should be returned");
     assert_eq!(wait_for_state(&environment, "large-output"), "exited");
@@ -345,9 +347,7 @@ fn waits_for_state_exit_and_literal_output_matches() {
         "stderr: {:?}",
         running_wait.stderr
     );
-    let running_record: Value =
-        serde_json::from_slice(&running_wait.stdout).expect("wait result should be JSON");
-    assert_eq!(running_record["state"], "running");
+    assert!(String::from_utf8_lossy(&running_wait.stdout).contains("State: running\n"));
 
     let matched = environment.run(&[
         "matching",
@@ -363,15 +363,13 @@ fn waits_for_state_exit_and_literal_output_matches() {
         "stderr: {:?}",
         match_wait.stderr
     );
-    let match_record: Value =
-        serde_json::from_slice(&match_wait.stdout).expect("match result should be JSON");
-    assert_eq!(match_record["state"], "exited");
+    assert!(String::from_utf8_lossy(&match_wait.stdout).contains("State: exited\n"));
 
     let exit_wait = environment.run(&["wait", "matching", "--exit"]);
     assert!(exit_wait.status.success(), "stderr: {:?}", exit_wait.stderr);
-    let exit_record: Value =
-        serde_json::from_slice(&exit_wait.stdout).expect("exit result should be JSON");
-    assert_eq!(exit_record["exit_code"], 7);
+    let exit_output = String::from_utf8_lossy(&exit_wait.stdout);
+    assert!(exit_output.contains("State: exited\n"));
+    assert!(exit_output.contains("Exit code: 7\n"));
 
     let stop = environment.run(&["stop", "waiting", "--force"]);
     assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
@@ -578,8 +576,8 @@ fn ps_orders_records_by_opaque_name() {
     let records = response["data"]
         .as_array()
         .expect("ps data should be an array");
-    assert_eq!(records[0]["key"]["name"], "616c706861");
-    assert_eq!(records[1]["key"]["name"], "7a657461");
+    assert_eq!(records[0]["key"]["name"], "alpha");
+    assert_eq!(records[1]["key"]["name"], "zeta");
 }
 
 #[cfg(target_os = "linux")]

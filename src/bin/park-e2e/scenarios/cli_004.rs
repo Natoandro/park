@@ -26,7 +26,7 @@ pub fn treat_operation_words_as_names() -> Result<(), String> {
         .and_then(|data| data.get("key"))
         .and_then(|key| key.get("name"))
         .and_then(|name| name.as_str())
-        != Some("737461747573")
+        != Some("status")
     {
         return Err(format!("status did not address the `status` record: {json}"));
     }

@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_success, hex, parse_json};
+use super::super::support::{TestEnvironment, expect_success, parse_json};
 
 #[e2e(
     story = "PARK-INSPECT-002",
@@ -23,7 +23,7 @@ pub fn sort_ps_deterministically() -> Result<(), String> {
     expect_success("first ps", &first)?;
     let first_json = assert_ps_response("first ps", &first)?;
     let first_names = ps_names(&first_json)?;
-    let expected = [hex(b"alpha"), hex(b"middle"), hex(b"zeta")];
+    let expected = ["alpha".to_owned(), "middle".to_owned(), "zeta".to_owned()];
     if first_names != expected {
         return Err(format!(
             "ps names were not sorted: expected {expected:?}, got {first_names:?}"

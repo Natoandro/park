@@ -18,7 +18,7 @@ pub fn list_records_with_ps() -> Result<(), String> {
     let environment = TestEnvironment::new("PARK-INSPECT-001")?;
     let empty = environment.run(&["ps"])?;
     expect_success("empty ps", &empty)?;
-    if !empty.stderr.is_empty() || empty.stdout != b"[]\n" {
+    if !empty.stderr.is_empty() || empty.stdout != b"No process records.\n" {
         return Err(format!(
             "empty ps returned unexpected output: stdout={:?}, stderr={:?}",
             empty.stdout, empty.stderr
@@ -40,23 +40,14 @@ pub fn list_records_with_ps() -> Result<(), String> {
             String::from_utf8_lossy(&listed.stderr)
         ));
     }
-    let records: Vec<serde_json::Value> = serde_json::from_slice(&listed.stdout)
-        .map_err(|error| format!("ps human output was not readable: {error}"))?;
-    if records.len() != 2 {
-        return Err(format!("expected two current-project records, got {records:?}"));
-    }
-    let expected_project = environment.project_path().to_string_lossy().into_owned();
-    for record in &records {
-        let project = record
-            .get("key")
-            .and_then(|key| key.get("project_path"))
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "ps record has no project path".to_owned())?;
-        if project != expected_project {
-            return Err(format!(
-                "ps listed record from {project:?}, expected {expected_project:?}"
-            ));
-        }
+    let output = String::from_utf8_lossy(&listed.stdout);
+    if !output.starts_with("NAME")
+        || !output.contains("current-one")
+        || !output.contains("current-two")
+        || output.contains('{')
+        || output.contains('[')
+    {
+        return Err(format!("ps human output was unexpected: {output:?}"));
     }
     Ok(())
 }

@@ -26,7 +26,7 @@ pub fn accept_dash_prefixed_launch_names() -> Result<(), String> {
         .and_then(|data| data.get("key"))
         .and_then(|key| key.get("name"))
         .and_then(|name| name.as_str())
-        != Some("2d2d737461747573")
+        != Some("--status")
     {
         return Err(format!("status did not address the `--status` record: {json}"));
     }

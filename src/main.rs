@@ -10,6 +10,8 @@ use park_cli::{
 };
 use serde_json::Value;
 
+mod render;
+
 fn main() {
     if env::args_os()
         .nth(1)
@@ -57,7 +59,8 @@ fn main() {
         let _ = stdout.write_all(chunk.as_bytes());
         let _ = stdout.flush();
     };
-    let result = runtime.block_on(execute(invocation, &mut follow_output));
+    let mut result = runtime.block_on(execute(invocation, &mut follow_output));
+    render::decode_json_result(&mut result);
 
     if requests_json {
         println!(
@@ -67,18 +70,7 @@ fn main() {
     } else if follows_logs && result.ok {
         // Follow output is written as each IPC frame arrives.
     } else if result.ok {
-        if let Some(data) = &result.data {
-            if let Some(content) = data.get("content").and_then(Value::as_str) {
-                print!("{content}");
-            } else {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(data).expect("response data should serialize")
-                );
-            }
-        } else {
-            println!("{}", result.human_message());
-        }
+        print!("{}", render::human_result(&result));
     } else {
         eprintln!("error: {}", result.human_message());
     }

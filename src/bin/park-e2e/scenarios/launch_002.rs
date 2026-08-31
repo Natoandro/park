@@ -42,7 +42,7 @@ pub fn record_before_reporting_success() -> Result<(), String> {
     expect_success("immediate ps", &records)?;
     expect_contains(
         &String::from_utf8_lossy(&records.stdout),
-        "696e737065637461626c65",
+        "inspectable",
     )?;
     let stop = environment.run(&["stop", "inspectable", "--force"])?;
     expect_success("stop", &stop)?;

@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_contains, expect_success, hex, parse_json};
+use super::super::support::{TestEnvironment, expect_contains, expect_success, parse_json};
 
 #[e2e(
     story = "PARK-CLI-002",
@@ -39,17 +39,14 @@ pub fn preserve_exact_managed_command() -> Result<(), String> {
     let record = status_json
         .get("data")
         .ok_or_else(|| "status response is missing data".to_owned())?;
-    if record.get("executable").and_then(|value| value.as_str()) != Some("2f62696e2f7368") {
+    if record.get("executable").and_then(|value| value.as_str()) != Some("/bin/sh") {
         return Err(format!("status recorded the wrong executable: {record}"));
     }
     let recorded_arguments = record
         .get("arguments")
         .and_then(|value| value.as_array())
         .ok_or_else(|| "status response is missing arguments".to_owned())?;
-    let expected_arguments = arguments
-        .iter()
-        .map(|argument| hex(argument.as_bytes()))
-        .collect::<Vec<_>>();
+    let expected_arguments = arguments.iter().map(|argument| (*argument).to_owned()).collect::<Vec<_>>();
     let actual_arguments = recorded_arguments
         .iter()
         .map(|argument| argument.as_str().unwrap_or_default().to_owned())

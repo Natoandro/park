@@ -6,7 +6,7 @@ use std::process::{Command, Output};
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_success, hex, parse_json};
+use super::super::support::{TestEnvironment, expect_success, parse_json};
 
 #[e2e(
     story = "PARK-SCOPE-006",
@@ -49,7 +49,7 @@ pub fn preserve_non_utf8_names_and_arguments() -> Result<(), String> {
         .get("data")
         .cloned()
         .ok_or_else(|| "non-UTF-8 status has no record".to_owned())?;
-    let expected_name = hex(name.as_os_str().as_bytes());
+    let expected_name = String::from_utf8_lossy(name.as_os_str().as_bytes()).into_owned();
     if record
         .get("key")
         .and_then(|key| key.get("name"))
@@ -60,7 +60,7 @@ pub fn preserve_non_utf8_names_and_arguments() -> Result<(), String> {
     }
     let expected_arguments = command[1..]
         .iter()
-        .map(|argument| hex(argument.as_os_str().as_bytes()))
+        .map(|argument| String::from_utf8_lossy(argument.as_os_str().as_bytes()).into_owned())
         .collect::<Vec<_>>();
     let actual_arguments = record
         .get("arguments")

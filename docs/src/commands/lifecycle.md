@@ -25,6 +25,10 @@ selects one record by name. Records remain available after the managed command
 exits, so both commands can inspect historical outcomes as well as active
 processes.
 
+Without `--json`, `ps` prints a human-readable process table and `status` prints
+human-readable record details. With `--json`, both commands emit the stable JSON
+result envelope described in [Scripting](scripting.md).
+
 The lifecycle states are `starting`, `running`, `stopping`, `exited`, `failed`,
 and `killed`. The last three are terminal states.
 

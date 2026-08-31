@@ -33,7 +33,9 @@ For inspection commands, `ps` places the matching project records in `data`
 and `status` places the selected record there. A log result places its selected
 `stream`, collected `content`, and observed `state` in `data`. JSON output is
 written as one result, including error results, so scripts do not need to
-interpret stderr text when using these flags.
+interpret stderr text when using these flags. Process names, executables, and
+arguments are returned as decoded UTF-8 strings; invalid bytes use the Unicode
+replacement character.
 
 Lifecycle and wait commands do not have a documented `--json` option. Their
 success or failure is still represented by the process exit code.
