@@ -118,6 +118,7 @@ Park is intended for:
 - [ ] Optional project configuration with `park up` and `park down`.
 - [ ] Broader platform-specific process-ownership and lifecycle guarantees.
 - [ ] Log rotation, retention, and pruning.
+- [ ] Graceful daemon upgrades that preserve active managed processes.
 
 See the [roadmap](docs/implementation-plan.md#roadmap) for the complete prioritized list.
 

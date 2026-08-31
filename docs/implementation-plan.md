@@ -238,6 +238,11 @@ configuration-free launch form and the existing project/name identity.
 - [ ] **11. Selectable project resolution**
    Consider Git-root resolution as an explicit policy, never as an implicit
    change to invocation-directory scoping.
+- [ ] **12. Graceful daemon upgrades**
+   Add an explicit handoff path that lets a new Park binary replace a running
+   daemon without interrupting managed process groups. Preserve socket and lock
+   ownership and supervisor relationships during the handoff, and reject
+   incompatible upgrades safely.
 
 Process isolation and sandboxing are not supported by Park's core design. Park
 should continue to manage ordinary host processes; users requiring filesystem,

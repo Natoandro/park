@@ -56,6 +56,7 @@ The following capabilities are not yet implemented:
 - Optional project configuration with `park up` and `park down`.
 - Broader platform-specific process-ownership and lifecycle guarantees.
 - Explicit reboot recovery policies.
+- Graceful daemon upgrades that preserve active managed processes.
 - Log rotation, retention, pruning, and compression.
 - Faster and richer log queries, structured log metadata, and optional external
   log export.
