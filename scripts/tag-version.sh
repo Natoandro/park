@@ -5,7 +5,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
 usage() {
-    printf 'usage: %s [--push] [--dry-run]\n' "$0"
+    printf 'usage: %s [--push] [--dry-run] [--wait-ci]\n' "$0"
 }
 
 fail() {
@@ -15,10 +15,12 @@ fail() {
 
 push_tag=0
 dry_run=0
+wait_ci=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --push) push_tag=1 ;;
         --dry-run) dry_run=1 ;;
+        --wait-ci) wait_ci=1 ;;
         -h|--help)
             usage
             exit 0
@@ -50,28 +52,46 @@ if [ "$local_head" != "$remote_head" ]; then
     fail 'local master is not synchronized with origin/master'
 fi
 
-if ! ci_result=$(gh run list \
-    --workflow test.yml \
-    --branch master \
-    --commit "$remote_head" \
-    --limit 1 \
-    --json status,conclusion,databaseId \
-    --jq 'if length == 0 then "missing" else .[0] | [.status, (.conclusion // "none"), (.databaseId | tostring)] | join(" ") end'
-); then
-    fail 'could not query the GitHub Actions Test workflow'
-fi
+query_ci() {
+    gh run list \
+        --workflow test.yml \
+        --branch master \
+        --commit "$remote_head" \
+        --limit 1 \
+        --json status,conclusion,databaseId \
+        --jq 'if length == 0 then "missing" else .[0] | [.status, (.conclusion // "none"), (.databaseId | tostring)] | join(" ") end'
+}
 
-case "$ci_result" in
-    'completed success '*)
-        printf 'CI passed for master (%s)\n' "${ci_result##* }"
-        ;;
-    missing)
-        fail "no GitHub Actions Test workflow run found for master commit $remote_head"
-        ;;
-    *)
-        fail "latest GitHub Actions Test workflow for master is not successful: $ci_result"
-        ;;
-esac
+while :; do
+    if ! ci_result=$(query_ci); then
+        fail 'could not query the GitHub Actions Test workflow'
+    fi
+
+    case "$ci_result" in
+        'completed success '*)
+            printf 'CI passed for master (%s)\n' "${ci_result##* }"
+            break
+            ;;
+        missing)
+            if [ "$wait_ci" -eq 0 ]; then
+                fail "no GitHub Actions Test workflow run found for master commit $remote_head"
+            fi
+            printf 'waiting for the Test workflow for master commit %s\n' "$remote_head"
+            ;;
+        'completed '*)
+            fail "latest GitHub Actions Test workflow for master is not successful: $ci_result"
+            ;;
+        *)
+            if [ "$wait_ci" -eq 0 ]; then
+                fail "latest GitHub Actions Test workflow for master is not successful: $ci_result"
+            fi
+            printf 'waiting for the Test workflow for master commit %s (%s)\n' \
+                "$remote_head" "$ci_result"
+            ;;
+    esac
+
+    sleep 10
+done
 
 scripts/check-version.sh
 

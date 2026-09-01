@@ -82,6 +82,7 @@ from the workspace version:
 ```bash
 scripts/tag-version.sh --dry-run
 scripts/tag-version.sh --push
+scripts/tag-version.sh --wait-ci --push
 ```
 
 The tag script checks that all workspace package versions match, requires a
@@ -90,7 +91,10 @@ the GitHub Actions `Test` workflow passed for that exact commit. It also refuses
 to overwrite an existing tag. The script requires an authenticated `gh` CLI.
 By default it creates the tag locally; `--push` also pushes it to `origin`.
 `--dry-run` performs no Git mutations and can be combined with either mode, but
-still performs every preflight check.
+still performs every preflight check. By default, an unavailable or incomplete
+Test workflow causes the script to fail. `--wait-ci` polls the Test workflow for
+the exact `master` commit until it completes successfully before creating the
+tag; a failed or cancelled run still stops the script.
 
 Pushing a `v*` tag starts the `release.yml` workflow. It runs the reusable
 `Test` workflow first. Only after all checks succeed do the binary release,

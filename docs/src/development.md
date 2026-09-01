@@ -1,7 +1,7 @@
 # Development Status
 
 Park is an active-development Unix-first project. The package is `park-cli`,
-the binary is `park`, and the current package version is `0.2.0`. The latest
+the binary is `park`, and the current package version is `0.2.1`. The latest
 release is published to crates.io; see [Installation](installation.md) for the
 stable and latest-development installation commands.
 

@@ -149,7 +149,7 @@ update_macro_dependency_version() {
     manifest=Cargo.toml
     temporary="$manifest.tmp.$$"
     awk -v new_version="$new_version" '
-        /^[[:space:]]*park-e2e-macros[[:space:]]*=[[:space:]]*\{[[:space:]]*version[[:space:]]*=/ && !version_updated {
+        /^[[:space:]]*park-e2e-macros[[:space:]]*=[[:space:]]*\{[^}]*version[[:space:]]*=/ && !version_updated {
             sub(/version[[:space:]]*=[[:space:]]*"[^"]*"/, "version = \"" new_version "\"")
             version_updated = 1
         }
