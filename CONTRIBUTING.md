@@ -5,11 +5,14 @@ binary is `park`, and CI targets the current stable Rust toolchain.
 
 ## Local Setup
 
-Clone the repository and install the pre-commit version check:
+Clone the repository and install the pre-commit checks:
 
 ```bash
 scripts/setup-hooks.sh
 ```
+
+Commits run the version check, formatting check, and workspace compilation check.
+Full tests, Clippy, and Docker E2E remain part of CI.
 
 Build the binary from the repository root:
 

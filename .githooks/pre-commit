@@ -2,4 +2,8 @@
 set -eu
 
 repo_root=$(git rev-parse --show-toplevel)
-exec "$repo_root/scripts/check-version.sh"
+cd "$repo_root"
+
+"$repo_root/scripts/check-version.sh"
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --locked
