@@ -144,6 +144,30 @@ update_development_version() {
 
 update_manifest Cargo.toml
 update_manifest e2e-macros/Cargo.toml
+
+update_macro_dependency_version() {
+    manifest=Cargo.toml
+    temporary="$manifest.tmp.$$"
+    awk -v new_version="$new_version" '
+        /^[[:space:]]*park-e2e-macros[[:space:]]*=[[:space:]]*\{[[:space:]]*version[[:space:]]*=/ && !version_updated {
+            sub(/version[[:space:]]*=[[:space:]]*"[^"]*"/, "version = \"" new_version "\"")
+            version_updated = 1
+        }
+        { print }
+        END {
+            if (!version_updated) {
+                exit 1
+            }
+        }
+    ' "$manifest" > "$temporary" || {
+        rm -f "$temporary"
+        printf 'could not update park-e2e-macros dependency in %s\n' "$manifest" >&2
+        exit 1
+    }
+    mv "$temporary" "$manifest"
+}
+
+update_macro_dependency_version
 update_development_version
 
 # Refresh the local package versions in Cargo.lock without changing dependency versions.
