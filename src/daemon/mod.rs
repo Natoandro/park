@@ -238,14 +238,14 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
             ));
         }
     };
-    if let Some(name) = operation_name(&operation)
-        && let Err(error) = validate_process_name(name)
-    {
-        return DispatchResponse::Single(IpcResponse::error(
-            request_id,
-            ResultStatus::Failure,
-            error.to_string(),
-        ));
+    if let Some(name) = operation_name(&operation) {
+        if let Err(error) = validate_process_name(name) {
+            return DispatchResponse::Single(IpcResponse::error(
+                request_id,
+                ResultStatus::Failure,
+                error.to_string(),
+            ));
+        }
     }
     match operation {
         IpcOperation::Launch {

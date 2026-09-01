@@ -24,9 +24,14 @@ pub fn use_xdg_state_and_runtime_locations() -> Result<(), String> {
     ])?;
     expect_success("launch", &launch)?;
 
-    let launch_record = parse_json("launch", &launch)?;
-    let stdout_log = path_from_record(&launch_record, "stdout")?;
-    let stderr_log = path_from_record(&launch_record, "stderr")?;
+    let status = environment.run(&["status", "xdg-layout", "--json"])?;
+    expect_success("status", &status)?;
+    let status_json = parse_json("status", &status)?;
+    let status_record = status_json
+        .get("data")
+        .ok_or_else(|| "status response is missing its record".to_owned())?;
+    let stdout_log = path_from_record(status_record, "stdout")?;
+    let stderr_log = path_from_record(status_record, "stderr")?;
     let state_dir = environment.root_path().join("state/park");
     let runtime_dir = environment.root_path().join("runtime/park");
 

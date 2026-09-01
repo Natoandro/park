@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_contains, expect_exit, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_contains, expect_exit, expect_success};
 
 #[e2e(
     story = "PARK-WAIT-001",
@@ -17,12 +17,8 @@ pub fn wait_for_exact_state() -> Result<(), String> {
 
     let running = environment.run(&["wait", "state-target", "--state", "running"])?;
     expect_success("wait for running", &running)?;
-    let running_record = parse_json("running wait", &running)?;
-    if running_record.get("state").and_then(|value| value.as_str()) != Some("running")
-        || running_record.get("pid").and_then(|value| value.as_u64()).is_none()
-    {
-        return Err(format!("running wait returned the wrong record: {running_record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&running.stdout), "State: running")?;
+    expect_contains(&String::from_utf8_lossy(&running.stdout), "PID: ")?;
 
     let wrong_state = environment.run(&[
         "wait",
@@ -40,11 +36,7 @@ pub fn wait_for_exact_state() -> Result<(), String> {
 
     let exited = environment.run(&["wait", "state-target", "--state", "exited"])?;
     expect_success("wait for exited", &exited)?;
-    let exited_record = parse_json("exited wait", &exited)?;
-    if exited_record.get("state").and_then(|value| value.as_str()) != Some("exited")
-        || exited_record.get("exit_code").and_then(|value| value.as_i64()) != Some(0)
-    {
-        return Err(format!("exited wait returned the wrong record: {exited_record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&exited.stdout), "State: exited")?;
+    expect_contains(&String::from_utf8_lossy(&exited.stdout), "Exit code: 0")?;
     Ok(())
 }

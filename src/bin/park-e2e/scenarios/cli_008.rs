@@ -79,9 +79,6 @@ pub fn use_operation_aliases() -> Result<(), String> {
     expect_success("clean target wait", &wait)?;
     let clean = environment.run(&["--clean"])?;
     expect_success("clean alias", &clean)?;
-    expect_contains(
-        &String::from_utf8_lossy(&clean.stdout),
-        "removed",
-    )?;
+    expect_contains(&String::from_utf8_lossy(&clean.stdout), "Removed ")?;
     Ok(())
 }

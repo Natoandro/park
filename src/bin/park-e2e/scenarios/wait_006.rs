@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_contains, expect_success};
 
 #[e2e(
     story = "PARK-WAIT-006",
@@ -17,12 +17,8 @@ pub fn match_empty_text_immediately() -> Result<(), String> {
 
     let matched = environment.run(&["wait", "empty-match", "--match", ""])?;
     expect_success("empty match", &matched)?;
-    let record = parse_json("empty match", &matched)?;
-    if record.get("state").and_then(|value| value.as_str()) != Some("running")
-        || record.get("pid").and_then(|value| value.as_u64()).is_none()
-    {
-        return Err(format!("empty match returned the wrong record: {record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&matched.stdout), "State: running")?;
+    expect_contains(&String::from_utf8_lossy(&matched.stdout), "PID: ")?;
 
     let stop = environment.run(&["stop", "empty-match", "--force"])?;
     expect_success("force stop", &stop)?;

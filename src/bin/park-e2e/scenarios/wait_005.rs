@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_contains, expect_success};
 
 #[e2e(
     story = "PARK-WAIT-005",
@@ -68,9 +68,6 @@ pub fn match_output_after_restart() -> Result<(), String> {
     if stderr.stdout != b"first-error[?]later-error[?]" {
         return Err(format!("retained stderr is wrong: {:?}", stderr.stdout));
     }
-    let record = parse_json("later stdout match", &stdout_match)?;
-    if record.get("state").and_then(|value| value.as_str()) != Some("exited") {
-        return Err(format!("restart match returned the wrong record: {record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&stdout_match.stdout), "State: exited")?;
     Ok(())
 }

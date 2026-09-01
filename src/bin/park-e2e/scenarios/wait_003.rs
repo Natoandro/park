@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_contains, expect_success};
 
 #[e2e(
     story = "PARK-WAIT-003",
@@ -30,12 +30,8 @@ pub fn wait_for_literal_output_in_either_stream() -> Result<(), String> {
         "2s",
     ])?;
     expect_success("stdout match", &stdout_match)?;
-    let stdout_record = parse_json("stdout match", &stdout_match)?;
-    if stdout_record.get("state").and_then(|value| value.as_str()) != Some("running")
-        || stdout_record.get("pid").and_then(|value| value.as_u64()).is_none()
-    {
-        return Err(format!("stdout match returned a stale record: {stdout_record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&stdout_match.stdout), "State: running")?;
+    expect_contains(&String::from_utf8_lossy(&stdout_match.stdout), "PID: ")?;
 
     let stderr_match = environment.run(&[
         "wait",
@@ -46,10 +42,7 @@ pub fn wait_for_literal_output_in_either_stream() -> Result<(), String> {
         "2s",
     ])?;
     expect_success("stderr match", &stderr_match)?;
-    let stderr_record = parse_json("stderr match", &stderr_match)?;
-    if stderr_record.get("state").and_then(|value| value.as_str()) != Some("running") {
-        return Err(format!("stderr match returned the wrong record: {stderr_record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&stderr_match.stdout), "State: running")?;
 
     let stop = environment.run(&["stop", "output-target", "--force"])?;
     expect_success("force stop", &stop)?;

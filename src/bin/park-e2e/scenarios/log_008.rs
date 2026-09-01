@@ -1,8 +1,6 @@
 use std::fs;
 
 use park_e2e_macros::e2e;
-use serde_json::Value;
-
 use super::super::Scenario;
 use super::super::support::{TestEnvironment, expect_success, parse_json};
 
@@ -42,11 +40,12 @@ pub fn handle_empty_and_invalid_byte_logs() -> Result<(), String> {
         "printf '\\377\\n'",
     ])?;
     expect_success("invalid-byte launch", &invalid_launch)?;
-    let launch_record: Value = serde_json::from_slice(&invalid_launch.stdout)
-        .map_err(|error| format!("launch record was not JSON: {error}"))?;
-    let stdout_path = launch_record["logs"]["stdout"]
+    let status = environment.run(&["status", "invalid-log", "--json"])?;
+    expect_success("invalid-byte status", &status)?;
+    let status_value = parse_json("invalid-byte status", &status)?;
+    let stdout_path = status_value["data"]["logs"]["stdout"]
         .as_str()
-        .ok_or_else(|| "launch record did not contain a stdout log path".to_owned())?;
+        .ok_or_else(|| "status record did not contain a stdout log path".to_owned())?;
     expect_success(
         "invalid-byte wait",
         &environment.run(&["wait", "invalid-log", "--exit"] )?,

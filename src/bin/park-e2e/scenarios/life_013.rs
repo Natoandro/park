@@ -41,7 +41,10 @@ pub fn clean_terminal_records_globally() -> Result<(), String> {
 
     let clean = environment.run(&["clean"])?;
     expect_success("clean", &clean)?;
-    expect_contains(&String::from_utf8_lossy(&clean.stdout), "\"removed\": 2")?;
+    expect_contains(
+        &String::from_utf8_lossy(&clean.stdout),
+        "Removed 2 process record(s).",
+    )?;
     expect_exit(
         "first terminal status after clean",
         &environment.run(&["status", "terminal-one"])? ,

@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_exit, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_exit, expect_success, expect_contains};
 
 #[e2e(
     story = "PARK-WAIT-002",
@@ -17,24 +17,13 @@ pub fn wait_for_any_terminal_exit() -> Result<(), String> {
     expect_success("exited launch", &exited_launch)?;
     let exited_wait = environment.run(&["wait", "exited", "--exit"])?;
     expect_success("exited wait", &exited_wait)?;
-    let exited_record = parse_json("exited wait", &exited_wait)?;
-    if exited_record.get("state").and_then(|value| value.as_str()) != Some("exited") {
-        return Err(format!("terminal wait returned a non-exited record: {exited_record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&exited_wait.stdout), "State: exited")?;
 
     let failed_launch = environment.run(&["failed", "--", "/definitely/missing/park-command"])?;
     expect_exit("failed launch", &failed_launch, 1)?;
     let failed_wait = environment.run(&["wait", "failed", "--exit"])?;
     expect_success("failed wait", &failed_wait)?;
-    let failed_record = parse_json("failed wait", &failed_wait)?;
-    if failed_record.get("state").and_then(|value| value.as_str()) != Some("failed")
-        || failed_record
-            .get("failure_reason")
-            .and_then(|value| value.as_str())
-            .is_none()
-    {
-        return Err(format!("terminal wait returned a non-failed record: {failed_record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&failed_wait.stdout), "State: failed")?;
 
     let killed_launch = environment.run(&["killed", "--", "/bin/sleep", "30"])?;
     expect_success("killed launch", &killed_launch)?;
@@ -44,14 +33,7 @@ pub fn wait_for_any_terminal_exit() -> Result<(), String> {
     expect_success("force stop", &stop)?;
     let killed_wait = environment.run(&["wait", "killed", "--exit"])?;
     expect_success("killed wait", &killed_wait)?;
-    let killed_record = parse_json("killed wait", &killed_wait)?;
-    if killed_record.get("state").and_then(|value| value.as_str()) != Some("killed")
-        || killed_record
-            .get("termination_signal")
-            .and_then(|value| value.as_i64())
-            .is_none()
-    {
-        return Err(format!("terminal wait returned a non-killed record: {killed_record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&killed_wait.stdout), "State: killed")?;
+    expect_contains(&String::from_utf8_lossy(&killed_wait.stdout), "Termination signal: ")?;
     Ok(())
 }

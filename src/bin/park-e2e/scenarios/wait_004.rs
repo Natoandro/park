@@ -1,7 +1,7 @@
 use park_e2e_macros::e2e;
 
 use super::super::Scenario;
-use super::super::support::{TestEnvironment, expect_success, parse_json};
+use super::super::support::{TestEnvironment, expect_contains, expect_success};
 
 #[e2e(
     story = "PARK-WAIT-004",
@@ -34,9 +34,6 @@ pub fn match_historical_output() -> Result<(), String> {
         "1s",
     ])?;
     expect_success("historical match", &matched)?;
-    let record = parse_json("historical match", &matched)?;
-    if record.get("state").and_then(|value| value.as_str()) != Some("exited") {
-        return Err(format!("historical match returned the wrong record: {record}"));
-    }
+    expect_contains(&String::from_utf8_lossy(&matched.stdout), "State: exited")?;
     Ok(())
 }
