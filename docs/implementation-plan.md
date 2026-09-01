@@ -7,7 +7,7 @@ This proposed Unix-first Rust project preserves Park's public invariants: projec
 Phase 0 establishes the platform, toolchain, and dependency policy before implementation. Do not add a dependency until its use is approved. `clap`, `serde`, and `serde_json` are conventional CLI/serialization dependencies; all other third-party crates require explicit approval before they appear in `Cargo.toml`.
 
 - [x] Confirm the current supported platform: Unix-only.
-- [x] Confirm the Rust toolchain policy: Edition 2024 and MSRV 1.85.
+- [x] Confirm the Rust toolchain policy: Edition 2024 and current stable Rust.
 - [x] Approve the async/process strategy: Tokio.
 - [x] Approve the persistence strategy: SQLite process metadata with append-only log files.
 - [x] Approve Unix process-group, signal, and advisory-lock support through `nix`.
@@ -16,7 +16,9 @@ Phase 0 establishes the platform, toolchain, and dependency policy before implem
 Recorded decisions:
 
 - Current platform: Unix-only; Windows support is not yet implemented.
-- Toolchain: Edition 2024 with MSRV 1.85.
+- Toolchain: Edition 2024 with current stable Rust as the CI target. No explicit
+  compiler-version support promise is maintained beyond the Edition 2024
+  requirement.
 - Async runtime and local IPC: `tokio`; synchronous threads and standard-library sockets were rejected for the current version.
 - Durable metadata: SQLite backed by `rusqlite`; process output remains in separate append-only files.
 - Unix process groups, signals, and advisory locking: `nix`; internal FFI and a separate `fs2` dependency were rejected.
@@ -27,7 +29,7 @@ Recorded decisions:
 ## Phase 1: Workspace and Public Contract
 
 - [x] Create the `park-cli` Cargo package with a `park` binary target.
-- [x] Set Edition 2024 and the minimum supported Rust version of 1.85.
+- [x] Set Edition 2024 and target the current stable Rust toolchain.
 - [x] Add only approved dependencies; commit `Cargo.lock` for reproducible application builds.
 - [x] Define CLI parsing for `park <name> -- <command> [args...]` and explicit subcommands.
 - [x] Reserve `run` as an optional alias without making it the primary invocation.
@@ -254,7 +256,9 @@ network, or resource isolation should use containers or virtual machines.
 
 ## Approved Dependencies
 
-Approved for the current version. Use the latest release compatible with the MSRV unless a phase records a narrower version requirement.
+Approved for the current version. Use the latest release compatible with the
+current stable Rust toolchain unless a phase records a narrower version
+requirement.
 
 - [x] `clap`: conventional CLI argument parsing and subcommand boundaries.
 - [x] `serde`: conventional structured data serialization for persisted records and IPC payloads.

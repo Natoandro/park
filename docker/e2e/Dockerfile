@@ -1,6 +1,6 @@
-ARG RUST_VERSION=1.85
+ARG RUST_IMAGE=rust:bookworm
 ARG BUILD_PROFILE=release
-FROM rust:${RUST_VERSION}-bookworm AS builder
+FROM ${RUST_IMAGE} AS builder
 ARG BUILD_PROFILE
 
 WORKDIR /workspace

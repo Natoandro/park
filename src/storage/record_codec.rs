@@ -227,16 +227,15 @@ pub(super) fn decode_stored_record(
 ) -> Result<ProcessRecord, StorageError> {
     use std::os::unix::ffi::OsStringExt;
 
-    if let Some(key) = expected_key {
-        if stored.digest != files::key_digest(key)
+    if let Some(key) = expected_key
+        && (stored.digest != files::key_digest(key)
             || stored.project_path != project_bytes(key)
-            || stored.name != name_bytes(key)
-        {
-            return Err(StorageError::InvalidRecordInvariant {
-                path: storage.paths.database_path().to_path_buf(),
-                source: ProcessRecordValidationError::RecordPath,
-            });
-        }
+            || stored.name != name_bytes(key))
+    {
+        return Err(StorageError::InvalidRecordInvariant {
+            path: storage.paths.database_path().to_path_buf(),
+            source: ProcessRecordValidationError::RecordPath,
+        });
     }
 
     let project_path = PathBuf::from(OsString::from_vec(stored.project_path));
@@ -276,13 +275,13 @@ pub(super) fn decode_stored_record(
         path: storage.paths.database_path().to_path_buf(),
         source,
     })?;
-    if let Some(expected_key) = expected_key {
-        if record.key() != expected_key {
-            return Err(StorageError::InvalidRecordInvariant {
-                path: storage.paths.database_path().to_path_buf(),
-                source: ProcessRecordValidationError::RecordPath,
-            });
-        }
+    if let Some(expected_key) = expected_key
+        && record.key() != expected_key
+    {
+        return Err(StorageError::InvalidRecordInvariant {
+            path: storage.paths.database_path().to_path_buf(),
+            source: ProcessRecordValidationError::RecordPath,
+        });
     }
     Ok(record)
 }

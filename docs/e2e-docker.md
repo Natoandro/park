@@ -60,12 +60,12 @@ docker build \
   .
 ```
 
-The default image uses Rust `1.85`, matching the project's MSRV. To exercise a
+The default image uses the current stable Rust toolchain. To exercise a
 different compatible compiler explicitly:
 
 ```bash
 docker build \
-  --build-arg RUST_VERSION=1.85 \
+  --build-arg RUST_IMAGE=rust:bookworm \
   --file docker/e2e/Dockerfile \
   --tag park-e2e:local \
   .

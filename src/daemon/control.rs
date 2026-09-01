@@ -105,12 +105,11 @@ async fn stop_record(
         if let Some(record) = wait_for_terminal(state, request_id, record.key(), deadline).await? {
             return Ok(record);
         }
-        if let Ok(Some(current)) = state.storage.load_record(record.key()) {
-            if process_identity::owns_group(&current) {
-                if let Some(group_id) = current.process_group_id() {
-                    let _ = signal_group(group_id, Signal::SIGKILL);
-                }
-            }
+        if let Ok(Some(current)) = state.storage.load_record(record.key())
+            && process_identity::owns_group(&current)
+            && let Some(group_id) = current.process_group_id()
+        {
+            let _ = signal_group(group_id, Signal::SIGKILL);
         }
     }
     let deadline = Instant::now() + STOP_TIMEOUT;

@@ -4,7 +4,8 @@ Park is under active development and published through crates.io. Park currently
 supports Unix; Windows is not yet supported.
 
 The Rust package is named `park-cli`, while the installed executable is
-`park`. The project uses Rust Edition 2024 and requires Rust 1.85 or newer.
+`park`. The project uses Rust Edition 2024 and targets the current stable Rust
+toolchain.
 
 ## Install From crates.io
 

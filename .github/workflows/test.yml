@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUST_VERSION: 1.85.0
+  RUST_VERSION: stable
 
 jobs:
   rust:
@@ -53,7 +53,7 @@ jobs:
 
       - name: Build E2E image
         run: >-
-          docker build --build-arg RUST_VERSION=1.85
+          docker build --build-arg RUST_IMAGE=rust:bookworm
           --file docker/e2e/Dockerfile --tag park-e2e:ci .
 
       - name: Run E2E scenarios

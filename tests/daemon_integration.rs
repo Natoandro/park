@@ -62,10 +62,11 @@ fn run_with_root(root: &Path, args: &[&str]) -> Output {
 
 impl Drop for TestEnvironment {
     fn drop(&mut self) {
-        if let Some(pid) = self.daemon_pid() {
-            if pid > 1 && pid != std::process::id() as i32 {
-                let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
-            }
+        if let Some(pid) = self.daemon_pid()
+            && pid > 1
+            && pid != std::process::id() as i32
+        {
+            let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
         }
         let _ = fs::remove_dir_all(&self.root);
     }
@@ -613,10 +614,10 @@ fn wait_for_state(environment: &TestEnvironment, name: &str) -> String {
         if output.status.success() {
             let response: Value =
                 serde_json::from_slice(&output.stdout).expect("status should be JSON");
-            if let Some(state) = response["data"]["state"].as_str() {
-                if state == "exited" || state == "failed" {
-                    return state.to_owned();
-                }
+            if let Some(state) = response["data"]["state"].as_str()
+                && (state == "exited" || state == "failed")
+            {
+                return state.to_owned();
             }
         }
         thread::sleep(Duration::from_millis(25));
@@ -630,10 +631,10 @@ fn wait_for_terminal_state(environment: &TestEnvironment, name: &str) -> String 
         if output.status.success() {
             let response: Value =
                 serde_json::from_slice(&output.stdout).expect("status should be JSON");
-            if let Some(state) = response["data"]["state"].as_str() {
-                if matches!(state, "exited" | "failed" | "killed") {
-                    return state.to_owned();
-                }
+            if let Some(state) = response["data"]["state"].as_str()
+                && matches!(state, "exited" | "failed" | "killed")
+            {
+                return state.to_owned();
             }
         }
         thread::sleep(Duration::from_millis(25));
@@ -643,10 +644,10 @@ fn wait_for_terminal_state(environment: &TestEnvironment, name: &str) -> String 
 
 fn wait_for_pid_file(path: &Path) -> i32 {
     for _ in 0..80 {
-        if let Ok(value) = fs::read_to_string(path) {
-            if let Ok(pid) = value.trim().parse() {
-                return pid;
-            }
+        if let Ok(value) = fs::read_to_string(path)
+            && let Ok(pid) = value.trim().parse()
+        {
+            return pid;
         }
         thread::sleep(Duration::from_millis(25));
     }

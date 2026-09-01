@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  RUST_VERSION: 1.85.0
+  RUST_VERSION: stable
 
 jobs:
   checks:
@@ -93,10 +93,6 @@ jobs:
         run: >-
           rustup toolchain install "$RUST_VERSION" --profile minimal
           --no-self-update
-
-      - name: Install current stable Rust
-        run: >-
-          rustup toolchain install stable --profile minimal --no-self-update
 
       - name: Check release tag version
         run: ./scripts/check-version.sh "$GITHUB_REF_NAME"

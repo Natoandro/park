@@ -2,7 +2,6 @@
 name = "park-cli"
 version = "0.1.4"
 edition = "2024"
-rust-version = "1.85"
 description = "A project-scoped background process manager for local development"
 license = "Apache-2.0"
 repository = "https://github.com/Natoandro/park"

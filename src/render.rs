@@ -40,17 +40,17 @@ fn decode_value(value: &mut Value) {
             }
         }
         Value::Object(object) => {
-            if let Some(key) = object.get_mut("key") {
-                if let Some(key) = key.as_object_mut() {
-                    decode_field(key, "name");
-                }
+            if let Some(key) = object.get_mut("key")
+                && let Some(key) = key.as_object_mut()
+            {
+                decode_field(key, "name");
             }
             decode_field(object, "executable");
-            if let Some(arguments) = object.get_mut("arguments") {
-                if let Some(arguments) = arguments.as_array_mut() {
-                    for argument in arguments {
-                        decode_hex_string(argument);
-                    }
+            if let Some(arguments) = object.get_mut("arguments")
+                && let Some(arguments) = arguments.as_array_mut()
+            {
+                for argument in arguments {
+                    decode_hex_string(argument);
                 }
             }
             for value in object.values_mut() {
@@ -78,7 +78,7 @@ fn decode_hex_string(value: &mut Value) {
 }
 
 fn decode_hex(value: &str) -> Option<Vec<u8>> {
-    if value.is_empty() || value.len() % 2 != 0 {
+    if value.is_empty() || !value.len().is_multiple_of(2) {
         return None;
     }
     (0..value.len())

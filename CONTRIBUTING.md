@@ -1,7 +1,7 @@
 # Contributing
 
 Park is a Unix-first Rust project. The package is `park-cli`, the installed
-binary is `park`, and the minimum supported Rust version is 1.85.
+binary is `park`, and CI targets the current stable Rust toolchain.
 
 ## Local Setup
 
