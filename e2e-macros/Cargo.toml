@@ -1,6 +1,6 @@
 [package]
 name = "park-e2e-macros"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2024"
 description = "Build-time metadata macro for Park end-to-end scenarios"
 license = "Apache-2.0"
