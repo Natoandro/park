@@ -28,6 +28,9 @@ pub struct IpcRequest {
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum IpcOperation {
     Ping,
+    Handshake {
+        client_version: String,
+    },
     Launch {
         project_path: ProjectPath,
         #[serde(with = "crate::os_string")]
@@ -293,6 +296,14 @@ pub fn request_for_ps(request_id: u64, project_path: ProjectPath) -> IpcRequest 
     }
 }
 
+pub(crate) fn request_for_handshake(request_id: u64, client_version: String) -> IpcRequest {
+    IpcRequest {
+        version: PROTOCOL_VERSION,
+        request_id,
+        operation: IpcOperation::Handshake { client_version },
+    }
+}
+
 pub fn request_for_launch(
     request_id: u64,
     project_path: ProjectPath,
@@ -420,6 +431,8 @@ pub enum IpcError {
     Deserialize(#[source] serde_json::Error),
     #[error("invalid IPC protocol message: {0}")]
     Protocol(String),
+    #[error("daemon handshake failed: {0}")]
+    Handshake(String),
 }
 
 #[cfg(test)]
@@ -436,6 +449,15 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&request).expect("request should serialize"),
             r#"{"version":1,"request_id":7,"operation":"status","key":{"project_path":"/project","name":"646576"}}"#
+        );
+    }
+
+    #[test]
+    fn serializes_versioned_handshake_request() {
+        let request = request_for_handshake(0, "0.2.1".to_owned());
+        assert_eq!(
+            serde_json::to_string(&request).expect("request should serialize"),
+            r#"{"version":1,"request_id":0,"operation":"handshake","client_version":"0.2.1"}"#
         );
     }
 

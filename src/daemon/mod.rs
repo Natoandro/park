@@ -322,7 +322,10 @@ fn operation_name(operation: &IpcOperation) -> Option<&OsStr> {
         | IpcOperation::Restart { key }
         | IpcOperation::Start { key }
         | IpcOperation::Remove { key, .. } => Some(key.name()),
-        IpcOperation::Ping | IpcOperation::Ps { .. } | IpcOperation::Clean => None,
+        IpcOperation::Ping
+        | IpcOperation::Handshake { .. }
+        | IpcOperation::Ps { .. }
+        | IpcOperation::Clean => None,
     }
 }
 
@@ -406,6 +409,9 @@ fn canonicalize_operation(
             keep_logs,
         }),
         IpcOperation::Ping => Ok(IpcOperation::Ping),
+        IpcOperation::Handshake { client_version } => {
+            Ok(IpcOperation::Handshake { client_version })
+        }
         IpcOperation::Clean => Ok(IpcOperation::Clean),
     }
 }
@@ -432,6 +438,25 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
 
     match request.operation {
         IpcOperation::Ping => IpcResponse::success(request.request_id, None),
+        IpcOperation::Handshake { client_version } => {
+            if client_version != env!("CARGO_PKG_VERSION") {
+                return IpcResponse::error(
+                    request.request_id,
+                    ResultStatus::Failure,
+                    format!(
+                        "incompatible Park versions: client {client_version}, daemon {}",
+                        env!("CARGO_PKG_VERSION")
+                    ),
+                );
+            }
+            IpcResponse::success(
+                request.request_id,
+                Some(serde_json::json!({
+                    "client_version": client_version,
+                    "daemon_version": env!("CARGO_PKG_VERSION"),
+                })),
+            )
+        }
         IpcOperation::Launch { .. } => IpcResponse::error(
             request.request_id,
             ResultStatus::Failure,

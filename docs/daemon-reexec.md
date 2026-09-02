@@ -178,6 +178,12 @@ reports a different binary version, the CLI sends the candidate executable
 path and version in the re-exec request, waits for the daemon to become ready,
 and retries the original request.
 
+The client supplies its identity, but the daemon is the compatibility
+authority. The daemon compares the client identity with its own and rejects an
+incompatible handshake before dispatching any managed-process operation. The
+client only validates that the response is structurally complete and echoes the
+identity it sent.
+
 This keeps the upgrade flow automatic without adding a public `park upgrade`
 command: the user upgrades through the original installation method, then the
 next normal Park invocation upgrades the daemon. The handshake and re-exec
@@ -449,7 +455,7 @@ fixed by the design above; these are execution tasks, not open design choices.
 
 ### Milestone 0: Contract and Primitives
 
-- [ ] [REXEC-M0-01] Add the client version handshake to the daemon connection
+- [x] [REXEC-M0-01] Add the client version handshake to the daemon connection
   path.
 - [ ] [REXEC-M0-02] Add the internal `reexec` IPC operation with candidate
   executable path and version fields.

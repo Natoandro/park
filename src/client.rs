@@ -6,11 +6,14 @@ use thiserror::Error;
 use tokio::time::sleep;
 
 use crate::daemon::INTERNAL_DAEMON_ARGUMENT;
-use crate::ipc::{IpcError, IpcRequest, IpcResponse, send_request, send_stream_request};
+use crate::ipc::{
+    IpcError, IpcRequest, IpcResponse, request_for_handshake, send_request, send_stream_request,
+};
 use crate::storage::{StorageError, StoragePaths};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(3);
 const RETRY_INTERVAL: Duration = Duration::from_millis(25);
+const HANDSHAKE_REQUEST_ID: u64 = 0;
 
 pub async fn request_with_daemon_start(
     paths: &StoragePaths,
@@ -21,8 +24,11 @@ pub async fn request_with_daemon_start(
     let mut started = false;
 
     loop {
-        let last_error = match send_request(&paths.socket_path(), request).await {
-            Ok(response) => return Ok(response),
+        let last_error = match send_handshake(&paths.socket_path()).await {
+            Ok(()) => match send_request(&paths.socket_path(), request).await {
+                Ok(response) => return Ok(response),
+                Err(error) => error,
+            },
             Err(error) => error,
         };
 
@@ -54,11 +60,14 @@ where
     let mut on_chunk = on_chunk;
 
     loop {
-        let last_error =
-            match send_stream_request(&paths.socket_path(), request, &mut on_chunk).await {
+        let last_error = match send_handshake(&paths.socket_path()).await {
+            Ok(()) => match send_stream_request(&paths.socket_path(), request, &mut on_chunk).await
+            {
                 Ok(response) => return Ok(response),
                 Err(error) => error,
-            };
+            },
+            Err(error) => error,
+        };
 
         if !started && should_start_daemon(&last_error) {
             spawn_daemon()?;
@@ -72,6 +81,40 @@ where
         }
         sleep(RETRY_INTERVAL).await;
     }
+}
+
+async fn send_handshake(socket_path: &std::path::Path) -> Result<(), IpcError> {
+    let client_version = env!("CARGO_PKG_VERSION").to_owned();
+    let request = request_for_handshake(HANDSHAKE_REQUEST_ID, client_version.clone());
+    let response = send_request(socket_path, &request).await?;
+    validate_handshake(response, &client_version)
+}
+
+fn validate_handshake(response: IpcResponse, client_version: &str) -> Result<(), IpcError> {
+    if !response.result.ok {
+        return Err(IpcError::Handshake(
+            response.result.human_message().to_owned(),
+        ));
+    }
+    let data = response.result.data.as_ref().ok_or_else(|| {
+        IpcError::Handshake("daemon response is missing handshake data".to_owned())
+    })?;
+    let echoed_client_version = data
+        .get("client_version")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            IpcError::Handshake("daemon response is missing its client version".to_owned())
+        })?;
+    if echoed_client_version != client_version {
+        return Err(IpcError::Handshake(
+            "daemon response contains the wrong client version".to_owned(),
+        ));
+    }
+    data.get("daemon_version")
+        .and_then(serde_json::Value::as_str)
+        .filter(|version| !version.is_empty())
+        .ok_or_else(|| IpcError::Handshake("daemon response is missing its version".to_owned()))?;
+    Ok(())
 }
 
 fn should_start_daemon(error: &IpcError) -> bool {
@@ -153,5 +196,41 @@ mod tests {
         assert!(!should_start_daemon(&IpcError::Protocol(
             "bad response".to_owned()
         )));
+    }
+
+    #[test]
+    fn validates_a_successful_daemon_handshake() {
+        let response = IpcResponse::success(
+            HANDSHAKE_REQUEST_ID,
+            Some(serde_json::json!({
+                "client_version": "0.2.1",
+                "daemon_version": "0.2.1"
+            })),
+        );
+        assert!(validate_handshake(response, "0.2.1").is_ok());
+    }
+
+    #[test]
+    fn rejects_a_handshake_without_a_daemon_version() {
+        let response = IpcResponse::success(HANDSHAKE_REQUEST_ID, None);
+        assert!(matches!(
+            validate_handshake(response, "0.2.1"),
+            Err(IpcError::Handshake(message)) if message.contains("handshake data")
+        ));
+    }
+
+    #[test]
+    fn rejects_a_handshake_that_echoes_the_wrong_client_version() {
+        let response = IpcResponse::success(
+            HANDSHAKE_REQUEST_ID,
+            Some(serde_json::json!({
+                "client_version": "0.1.0",
+                "daemon_version": "0.2.1"
+            })),
+        );
+        assert!(matches!(
+            validate_handshake(response, "0.2.1"),
+            Err(IpcError::Handshake(message)) if message.contains("wrong client version")
+        ));
     }
 }

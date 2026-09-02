@@ -51,6 +51,54 @@ fn rejects_unknown_protocol_versions() {
 }
 
 #[test]
+fn returns_the_daemon_version_for_a_handshake() {
+    let root = std::env::temp_dir().join(format!("park-handshake-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let paths = StoragePaths::from_environment(&crate::storage::XdgEnvironment {
+        state_home: Some(root.join("state")),
+        runtime_dir: Some(root.join("runtime")),
+        home: None,
+    })
+    .expect("paths should resolve");
+    paths
+        .ensure_directories()
+        .expect("storage should initialize");
+    let storage = Storage::new(paths);
+    let response = handle_request(
+        &storage,
+        IpcRequest {
+            version: PROTOCOL_VERSION,
+            request_id: 0,
+            operation: IpcOperation::Handshake {
+                client_version: "0.2.1".to_owned(),
+            },
+        },
+    );
+    assert_eq!(response.result.status, ResultStatus::Success);
+    let data = response.result.data.expect("handshake data should exist");
+    assert_eq!(data["client_version"], "0.2.1");
+    assert_eq!(data["daemon_version"], env!("CARGO_PKG_VERSION"));
+    let mismatch = handle_request(
+        &storage,
+        IpcRequest {
+            version: PROTOCOL_VERSION,
+            request_id: 1,
+            operation: IpcOperation::Handshake {
+                client_version: "0.0.0".to_owned(),
+            },
+        },
+    );
+    assert_eq!(mismatch.result.status, ResultStatus::Failure);
+    assert!(
+        mismatch
+            .result
+            .human_message()
+            .contains("incompatible Park versions")
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn ps_and_status_return_persisted_records() {
     let root = std::env::temp_dir().join(format!("park-phase4-handler-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
