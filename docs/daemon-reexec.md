@@ -458,7 +458,7 @@ fixed by the design above; these are execution tasks, not open design choices.
   and validate it in the daemon before dispatch.
 - [x] [REXEC-M0-02] Add the internal `reexec` IPC operation with candidate
   executable path and version fields.
-- [ ] [REXEC-M0-03] Add public daemon-management parsing for `park daemon
+- [x] [REXEC-M0-03] Add public daemon-management parsing for `park daemon
   status`, `park daemon reexec`, and `park daemon config`.
 - [ ] [REXEC-M0-04] Add built-in configuration defaults and load the optional
   `$XDG_CONFIG_HOME/park/config.toml` file with its documented fallback.

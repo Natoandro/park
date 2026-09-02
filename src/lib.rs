@@ -11,7 +11,7 @@ mod registry;
 mod result;
 mod storage;
 
-pub use cli::{Invocation, LogsArgs, Operation, WaitArgs, parse_invocation};
+pub use cli::{DaemonOperation, Invocation, LogsArgs, Operation, WaitArgs, parse_invocation};
 pub use client::{ClientError, request_with_daemon_start, stream_request_with_daemon_start};
 pub use daemon::{
     DaemonError, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, run as run_daemon,

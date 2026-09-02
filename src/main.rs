@@ -145,6 +145,12 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
     if let Invocation::Operation(Operation::HelpSkills { json }) = &invocation {
         return skills_help_result(*json);
     }
+    if matches!(&invocation, Invocation::Operation(Operation::Daemon(_))) {
+        return CommandResult::error(
+            ResultStatus::Failure,
+            "daemon-management commands are not implemented",
+        );
+    }
 
     let paths = match StoragePaths::from_process_environment() {
         Ok(paths) => paths,
@@ -258,6 +264,9 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
         }
         Invocation::Operation(Operation::HelpSkills { .. }) => {
             unreachable!("skills help is handled before daemon setup")
+        }
+        Invocation::Operation(Operation::Daemon(_)) => {
+            unreachable!("daemon-management commands are handled before daemon setup")
         }
     };
 

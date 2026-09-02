@@ -77,6 +77,35 @@ fn parses_status_and_json() {
 }
 
 #[test]
+fn parses_daemon_management_commands() {
+    assert_eq!(
+        parse(&["park", "daemon", "status", "--json"]),
+        Invocation::Operation(Operation::Daemon(DaemonOperation::Status { json: true }))
+    );
+    assert_eq!(
+        parse(&["park", "daemon", "reexec", "--force"]),
+        Invocation::Operation(Operation::Daemon(DaemonOperation::Reexec { force: true }))
+    );
+    assert_eq!(
+        parse(&["park", "daemon", "config"]),
+        Invocation::Operation(Operation::Daemon(DaemonOperation::Config { json: false }))
+    );
+}
+
+#[test]
+fn daemon_management_json_is_limited_to_inspection_commands() {
+    assert!(parse(&["park", "daemon", "status", "--json"]).requests_json());
+    assert!(parse(&["park", "daemon", "config", "--json"]).requests_json());
+    assert!(!parse(&["park", "daemon", "reexec"]).requests_json());
+    assert!(parse_invocation(["park", "daemon", "reexec", "--json"]).is_err());
+}
+
+#[test]
+fn requires_a_daemon_management_subcommand() {
+    assert!(parse_invocation(["park", "daemon"] as [&str; 2]).is_err());
+}
+
+#[test]
 fn parses_long_operation_alias() {
     assert_eq!(
         parse(&["park", "--status", "dev"]),

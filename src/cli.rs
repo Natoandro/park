@@ -37,6 +37,7 @@ pub enum Operation {
     Rm { name: OsString, keep_logs: bool },
     Clean,
     Wait(WaitArgs),
+    Daemon(DaemonOperation),
     HelpSkills { json: bool },
 }
 
@@ -45,9 +46,26 @@ impl Operation {
         match self {
             Self::Ps { json } | Self::Status { json, .. } => *json,
             Self::Logs(args) => args.json,
+            Self::Daemon(operation) => operation.requests_json(),
             Self::HelpSkills { json } => *json,
             _ => false,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DaemonOperation {
+    Status { json: bool },
+    Reexec { force: bool },
+    Config { json: bool },
+}
+
+impl DaemonOperation {
+    fn requests_json(&self) -> bool {
+        matches!(
+            self,
+            Self::Status { json: true } | Self::Config { json: true }
+        )
     }
 }
 
@@ -155,10 +173,34 @@ enum OperationCliCommand {
     Clean,
     #[command(name = "wait")]
     Wait(WaitCliArgs),
+    #[command(name = "daemon")]
+    Daemon {
+        #[command(subcommand)]
+        operation: DaemonCliCommand,
+    },
     #[command(name = "help")]
     Help {
         #[arg(long, required = true)]
         skills: bool,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DaemonCliCommand {
+    #[command(name = "status")]
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(name = "reexec")]
+    Reexec {
+        #[arg(long)]
+        force: bool,
+    },
+    #[command(name = "config")]
+    Config {
         #[arg(long)]
         json: bool,
     },
@@ -276,7 +318,10 @@ fn validate_operation_name(operation: &Operation) -> Result<(), clap::Error> {
         | Operation::Signal { name, .. }
         | Operation::Rm { name, .. }
         | Operation::Wait(WaitArgs { name, .. }) => Some(name),
-        Operation::Ps { .. } | Operation::Clean | Operation::HelpSkills { .. } => None,
+        Operation::Ps { .. }
+        | Operation::Clean
+        | Operation::Daemon(_)
+        | Operation::HelpSkills { .. } => None,
     };
     if let Some(name) = name {
         validate_launch_name(name)?;
@@ -332,6 +377,11 @@ impl From<OperationCliCommand> for Operation {
                 match_text: args.match_text,
                 exit: args.exit,
                 timeout: args.timeout,
+            }),
+            OperationCliCommand::Daemon { operation } => Self::Daemon(match operation {
+                DaemonCliCommand::Status { json } => DaemonOperation::Status { json },
+                DaemonCliCommand::Reexec { force } => DaemonOperation::Reexec { force },
+                DaemonCliCommand::Config { json } => DaemonOperation::Config { json },
             }),
             OperationCliCommand::Help { json, .. } => Self::HelpSkills { json },
         }
