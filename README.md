@@ -267,6 +267,16 @@ Park stores process metadata in a private SQLite database at `$XDG_STATE_HOME/pa
 
 Park's strongest process-ownership checks are implemented on Linux using `/proc` start times, process groups, and sessions. Other Unix targets retain the Unix interface but cannot safely verify process identity across daemon restarts yet.
 
+## Configuration
+
+Park remains configuration-free for ordinary launches. The optional global TOML
+file is `$XDG_CONFIG_HOME/park/config.toml`, falling back to
+`$HOME/.config/park/config.toml`; missing files use built-in defaults. The
+configuration format defines daemon re-exec and managed-process restart
+policies, but those config-driven CLI behaviors are still under development.
+See the [configuration guide](docs/src/configuration.md) for the file format,
+defaults, and validation rules.
+
 ## Design Documents
 
 - [High-level architecture](docs/architecture.md)

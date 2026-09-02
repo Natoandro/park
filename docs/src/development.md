@@ -23,6 +23,8 @@ The current feature set includes:
 - Status, log inspection, filtering, following, signals, stop, restart, start,
   removal, cleanup, and wait operations.
 - Stable JSON output and lifecycle exit codes for scripts and coding agents.
+- Optional global configuration file parsing and validation for daemon and
+  managed-process policies.
 
 The normal launch form remains:
 

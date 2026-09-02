@@ -18,7 +18,7 @@ the same project later.
 cargo install park-cli
 ```
 
-[Quick start](quick-start.md) · [Installation](installation.md) · [Commands](commands/index.md)
+[Quick start](quick-start.md) · [Installation](installation.md) · [Commands](commands/index.md) · [Configuration](configuration.md)
 
 Park is a small CLI for developers who need a better alternative to leaving
 terminals open, using `nohup`, or rebuilding a process by hand. Coding-agent
