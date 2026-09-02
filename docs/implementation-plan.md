@@ -112,6 +112,9 @@ Phase 4 implementation decisions:
 - Re-exec configuration defaults to deferring when active records exist. The
   global `restart` value is opt-in, while an explicit force request selects the
   restart policy for that request without changing the configuration.
+- Managed-process restart configuration defaults to `never`. Its delay values
+  are parsed and validated as bounded `ms`, `s`, or `m` durations, with a
+  finite multiplier of at least `1.0` and `initial_delay <= max_delay`.
 
 ## Phase 5: Spawn, Capture, and Monitoring
 

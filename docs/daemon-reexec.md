@@ -128,8 +128,10 @@ The configuration also owns defaults for managed-process restart behavior. The
 initial restart policy values are `never`, `on-failure`, and `always`, with
 `never` as the default. Automatic restart is separate from an explicit
 `park restart`, a re-exec restart plan, or an intentional `park stop`; an
-intentional stop must suppress automatic restart. Backoff is exponential,
-bounded by `max_delay`, and limited by `max_attempts`.
+ intentional stop must suppress automatic restart. Backoff is exponential,
+ bounded by `max_delay`, and limited by `max_attempts`. Delay values use a
+ non-negative integer followed by `ms`, `s`, or `m`; `initial_delay` cannot
+ exceed `max_delay`, and `multiplier` must be finite and at least `1.0`.
 `max_attempts` counts automatic relaunches for one desired process run; it does
 not limit explicit lifecycle commands.
 
@@ -464,7 +466,7 @@ fixed by the design above; these are execution tasks, not open design choices.
   `$XDG_CONFIG_HOME/park/config.toml` file with its documented fallback.
 - [x] [REXEC-M0-05] Implement `daemon.reexec.active_processes` with `defer` as
   the default and `restart` as the opt-in value.
-- [ ] [REXEC-M0-06] Implement the managed-process restart policy and bounded
+- [x] [REXEC-M0-06] Implement the managed-process restart policy and bounded
   backoff configuration with `never` as the default.
 - [ ] [REXEC-M0-07] Implement `park daemon status` and `park daemon config`
   output, including JSON output for scripts.
