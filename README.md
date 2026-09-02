@@ -177,6 +177,19 @@ Park is intended for:
 
 See the [roadmap](docs/implementation-plan.md#roadmap) for the complete prioritized list.
 
+## Feedback And Contributions
+
+Park is still early, so real-world feedback is especially valuable. [Open an
+issue](https://github.com/Natoandro/park/issues) if you tried Park, found a bug,
+hit installation or platform friction, or have a concrete development workflow
+that Park does not support.
+
+Pull requests are welcome. For substantial behavior or feature changes, please
+open an issue first so the change can be discussed in the context of Park's
+scope. Keep pull requests focused and include tests and documentation when the
+public behavior changes. See [Contributing](CONTRIBUTING.md) for local checks and
+development instructions.
+
 ## Development
 
 Enable the repository's pre-commit version check once per checkout:

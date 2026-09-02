@@ -69,6 +69,19 @@ skill installation; the `park` CLI remains the operational interface.
 The remainder of this page explains the technical contract. Start with the
 [quick start](quick-start.md) if you want to try Park first.
 
+## Feedback And Contributions
+
+Park is still early, so real-world feedback is especially valuable. [Open an
+issue on GitHub](https://github.com/Natoandro/park/issues) if you tried Park,
+found a bug, hit installation or platform friction, or have a concrete workflow
+that Park does not support.
+
+[Pull requests](https://github.com/Natoandro/park/pulls) are welcome. For
+substantial behavior or feature changes, open an issue first so the change can
+be discussed in the context of Park's scope. See the [contribution
+guide](https://github.com/Natoandro/park/blob/master/CONTRIBUTING.md) for local
+checks and development instructions.
+
 ## The Core Workflow
 
 Launch a command from a project directory with a name and the `--` separator:

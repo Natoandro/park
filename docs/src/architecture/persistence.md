@@ -13,7 +13,7 @@ Durable state is stored under the XDG state directory:
 $XDG_STATE_HOME/park/
 |-- park.sqlite3
 |-- logs/
-`-- runtime/                 # fallback only
+`-- runtime/                 # only if XDG_RUNTIME_DIR is unavailable
 ```
 
 When `XDG_STATE_HOME` is unavailable, Park uses
