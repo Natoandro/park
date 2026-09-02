@@ -198,9 +198,9 @@ The following milestones are ordered by priority. Each feature must preserve the
 configuration-free launch form and the existing project/name identity.
 
 - [ ] **1. Automatic restart policies**
-   Add opt-in `never`, `on-failure`, and `always` policies with intentional-stop
-   suppression, bounded backoff, retry limits, persisted desired state, and clear
-   restart generations in status and logs.
+   Add global configuration for opt-in `never`, `on-failure`, and `always`
+   policies with intentional-stop suppression, bounded backoff, retry limits,
+   persisted desired state, and clear restart generations in status and logs.
 - [ ] **2. Filesystem-triggered restarts**
    Add an optional file-watch trigger for development processes, with debounce,
    ignored paths, restart-loop protection, and cross-platform behavior. Treat
@@ -240,12 +240,11 @@ configuration-free launch form and the existing project/name identity.
 - [ ] **11. Selectable project resolution**
    Consider Git-root resolution as an explicit policy, never as an implicit
    change to invocation-directory scoping.
-- [ ] **12. Graceful daemon upgrades**
-   Add an explicit handoff path that lets a new Park binary replace a running
-   daemon without interrupting managed process groups. Preserve socket and lock
-   ownership and supervisor relationships during the handoff, and reject
-   incompatible upgrades safely. See the [internal daemon re-exec
-   design](daemon-reexec.md).
+ - [ ] **12. Graceful daemon upgrades**
+   Add daemon-management commands, version-handshake re-exec, the default
+   idle-safe policy, and opt-in stop/restart handling for active records before
+   preserving active processes through descriptor handoff. See the [internal
+   daemon re-exec design](daemon-reexec.md) for the ordered development todo.
 - [ ] **13. Store process names as text**
    Migrate the SQLite process-name column from `BLOB` to `TEXT` now that process
    names use a restricted ASCII character set. Keep the current BLOB schema until
@@ -271,3 +270,4 @@ requirement.
 - [ ] `fs2`: rejected for the current version; advisory locking is provided through `nix`.
 - [ ] `anyhow`: rejected for the current version; typed errors are required at public command boundaries.
 - [ ] `time` / `chrono`: rejected for the current version; timestamps are persisted as epochs with internal formatting.
+- [x] `toml`: approved for the human-editable global configuration file, deserialized through the existing Serde types; a hand-written parser was rejected to avoid maintaining custom configuration parsing.

@@ -3,6 +3,11 @@
 Status: design only. This document describes a future upgrade mechanism; it is
 not an implemented command or protocol contract.
 
+Compatibility assumption: this design only targets Park daemons that support
+the re-exec operation. Compatibility with daemons from releases that predate
+re-exec is explicitly out of scope. No fallback protocol or legacy handoff
+path should be added for those releases.
+
 ## Decision Summary
 
 Park should keep its per-user daemon and use an **in-place re-exec** for daemon
@@ -15,14 +20,18 @@ It would change the daemon PID, while Linux supervisors currently use the
 daemon as their parent and terminate their managed process group when that
 parent dies. A same-PID `exec` preserves that relationship by construction.
 
-The implementation should be delivered in two stages:
+The implementation should be delivered in three stages:
 
 1. Re-exec only when no managed process or monitor is active.
-2. Re-exec with active processes after descriptor and monitor handoff is fully
+2. For an explicit or configured force-re-exec, stop active managed processes,
+   re-exec while idle, and restart the same records.
+3. Re-exec with active processes after descriptor and monitor handoff is fully
    implemented and tested.
 
-The first stage is deliberately useful on its own. It avoids risking active
-development servers while establishing the upgrade path.
+The first two stages are deliberately useful on their own. They avoid risking
+unplanned active-process loss while establishing the upgrade path. The second
+stage accepts temporary downtime for processes that the user has configured as
+safe to restart.
 
 ## Current Runtime Model
 
@@ -54,7 +63,84 @@ Durable process records and append-only logs are already the recovery source:
   data at startup and during relevant operations.
 
 Re-exec must preserve these existing ownership, logging, and recovery
-properties. It must not turn an upgrade into an implicit stop or restart.
+properties. It must not stop or restart managed processes unless the configured
+policy or an explicit `--force` command authorizes that behavior.
+
+## Command Taxonomy and Configuration
+
+Commands that target retained managed processes are **managed-process
+operations**. The existing `status`, `logs`, `stop`, `restart`, `start`,
+`signal`, `rm`, `clean`, and `wait` commands belong to this group. They address
+process records and, where applicable, require a project-scoped process key.
+
+Commands that target the per-user daemon are **daemon-management commands**.
+They should use an explicit namespace so they cannot be confused with a
+process name:
+
+```text
+park daemon status [--json]
+park daemon reexec [--force]
+park daemon config [--json]
+```
+
+`park daemon status` reports the daemon PID, binary version, protocol and
+handoff versions, generation, re-exec state, and active-record count.
+`park daemon reexec` is a public operator command and is also the test-facing
+entry point for the re-exec path. It honors the configured active-process
+policy; `--force` selects the stop-and-restart path for that invocation.
+`park daemon config` reports the effective configuration and its source.
+
+Configuration is global to the current user and is optional. The daemon uses
+built-in defaults when no file exists. The initial configuration file is
+`$XDG_CONFIG_HOME/park/config.toml`, falling back to
+`$HOME/.config/park/config.toml`:
+
+TOML is chosen for a human-editable configuration file. Its parser dependency
+is approved and will be recorded with the implementation dependency changes;
+this design does not add that dependency yet.
+
+```toml
+[daemon.reexec]
+active_processes = "defer"
+
+[managed_processes.restart]
+policy = "never"
+max_attempts = 3
+initial_delay = "250ms"
+max_delay = "30s"
+multiplier = 2.0
+```
+
+The default `active_processes` value is `defer`. The supported alternative is
+`restart`, which stops active records with normal lifecycle semantics, re-execs
+while idle, and restarts the records that were active before the operation.
+The setting applies to automatic version-mismatch handshakes and
+`park daemon reexec`. A command-line `--force` override selects `restart` for
+one explicit re-exec without modifying configuration.
+
+The daemon loads configuration at startup and reloads it before each automatic
+version-mismatch decision and explicit `daemon reexec` request. A malformed or
+unreadable configuration is a structured configuration failure; the daemon
+does not silently substitute defaults for a file the user provided.
+
+The configuration also owns defaults for managed-process restart behavior. The
+initial restart policy values are `never`, `on-failure`, and `always`, with
+`never` as the default. Automatic restart is separate from an explicit
+`park restart`, a re-exec restart plan, or an intentional `park stop`; an
+intentional stop must suppress automatic restart. Backoff is exponential,
+bounded by `max_delay`, and limited by `max_attempts`.
+`max_attempts` counts automatic relaunches for one desired process run; it does
+not limit explicit lifecycle commands.
+
+Restart attempts, desired restart state, and the current restart generation
+must be persisted so a daemon re-exec or crash cannot reset the retry budget or
+create duplicate restarts. Per-record overrides are not part of the initial
+configuration surface; the global defaults apply to all managed processes.
+
+Park must not infer that a command is a development server or watcher from its
+executable name. Enabling `restart` is an explicit user-level statement that
+all active managed records may be briefly stopped and restarted. Per-record
+restart policy can be added later if the global policy is too broad.
 
 ## Why Same-PID Exec
 
@@ -86,15 +172,17 @@ executable. Park does not need to know whether the user used Cargo, a package
 manager, or a release archive.
 
 The daemon needs a way to learn that its executable has been replaced. The
-preferred long-term trigger is daemon-side detection rather than a new client
-request. This is important because a newly installed CLI cannot ask an older
-daemon to understand a new `reexec` IPC operation.
+chosen trigger is an internal `reexec` IPC operation initiated by the upgraded
+CLI. Each CLI connection begins with a version handshake. When the daemon
+reports a different binary version, the CLI sends the candidate executable
+path and version in the re-exec request, waits for the daemon to become ready,
+and retries the original request.
 
-On Linux, the daemon can periodically compare the identity of the running
-executable with the executable at `current_exe()` or its startup path. An
-atomic installer replacement normally changes the file identity. Metadata
-changes such as size and modification time can provide a cheap preliminary
-check; the daemon must not hash the executable on every loop.
+This keeps the upgrade flow automatic without adding a public `park upgrade`
+command: the user upgrades through the original installation method, then the
+next normal Park invocation upgrades the daemon. The handshake and re-exec
+operation are part of the re-exec-capable protocol generation; no fallback is
+required for pre-re-exec daemons.
 
 Installers should replace binaries atomically. An installer that writes into a
 running executable in place is not a supported upgrade primitive. If the path
@@ -102,8 +190,24 @@ is missing, no longer executable, or cannot be inspected, the daemon should
 continue running the old image and report a diagnostic through internal
 logging, not terminate managed processes.
 
-An explicit internal re-exec request may be added later for testing and
-operator control. It must be version-negotiated before a new client sends it.
+The handshake outcomes are:
+
+- Equal client and daemon compatibility identities: continue normally.
+- Lower client identity: return a structured incompatibility error; never
+  downgrade the daemon.
+- Higher client identity with a matching candidate at the daemon's own startup
+  path: apply the configured active-process policy, re-exec, and retry the
+  original request.
+- Higher client identity with an old, missing, non-executable, malformed, or
+  otherwise incompatible candidate: return a structured upgrade-required
+  failure and keep the old daemon serving.
+- Candidate identity higher than the client identity: return a structured
+  client-too-old error; do not re-exec into an image the client cannot use.
+
+The compatibility identity is the Park package version together with the IPC
+protocol version and handoff format version. Development builds with the same
+identity are treated as compatible; a separate source revision identity is not
+part of the initial design.
 
 ## Re-exec State Machine
 
@@ -223,45 +327,33 @@ approved range.
 The current Tokio `Child` value cannot be serialized across exec. The new
 monitor must regain termination observation for the known supervisor PID.
 
-The implementation must choose one platform-specific mechanism before active
-handoff is enabled:
+Park will reattach to each direct supervisor child with Linux
+`waitpid(WNOHANG)` polling. The supervisor remains the daemon's direct child
+across exec, so the new monitor can observe and reap it without a new
+dependency or a serialized Tokio `Child` value.
 
-- Reattach to the direct child using an OS wait primitive and preserve exact
-  exit status.
-- Preserve a wait-related descriptor such as a Linux pidfd and use it in the
-  new monitor.
-- Move terminal-status persistence into a supervisor protocol that survives
-  daemon replacement.
-
-Polling only `/proc` is insufficient because it cannot recover the exact exit
-code or terminating signal after the child has been reaped. The first idle
-re-exec phase avoids this problem entirely.
+The reattached monitor must preserve the exact exit code or terminating signal.
+Polling only `/proc` is insufficient because it cannot recover that outcome
+after the child has been reaped. The first idle re-exec phase avoids this
+problem until the active monitor implementation is ready.
 
 ## Supervisor Safety
 
 Same-PID exec preserves the normal parent-death relationship when it succeeds,
 but upgrade failure must not accidentally become process termination.
 
-The current supervisor exits by killing its process group when it receives its
-parent-death signal. Before active handoff is declared safe, one of these
-failure policies must be implemented and tested:
+The supervisor will use a short-lived, authenticated handoff-grace lease. The
+daemon writes the lease before exec, binding it to the daemon generation and
+verified supervisor identities. If the supervisor receives its parent-death
+signal during this window, it waits for the replacement daemon to prove that it
+has adopted the same generation. A genuine daemon crash still terminates the
+managed group after the bounded lease expires.
 
-1. **Strict same-PID startup:** require the new image to initialize without
-   exiting, and accept that a post-exec startup crash kills active groups. This
-   is not acceptable as the final upgrade guarantee.
-2. **Supervisor handoff grace:** change supervisors to recognize a short-lived
-   authenticated handoff lease and wait for the replacement daemon before
-   killing the group. A genuine daemon crash still kills the group after the
-   lease expires.
-3. **Stable guardian:** move parent-death ownership to a small guardian whose
-   lifetime is independent of the daemon image. The guardian transfers daemon
-   ownership explicitly and kills the group only when both the daemon and
-   guardian determine that ownership is lost.
-
-The recommended direction is the handoff grace lease because it keeps the
-existing supervisor shape while distinguishing intentional re-exec from an
-unexpected daemon death. The lease must be private to the user, bound to the
-daemon generation, and impossible to satisfy with only a reused PID.
+The lease must be private to the user, bound to the daemon generation, and
+impossible to satisfy with only a reused PID. A successful same-PID exec clears
+the lease after the new daemon has initialized. This preserves the existing
+parent-death safety behavior while preventing a failed upgrade from being
+treated as an ordinary daemon crash.
 
 ## Failure and Recovery Rules
 
@@ -318,14 +410,155 @@ true:
 In this phase, only the listener and daemon lock need to survive exec. The new
 image can reconstruct all other state from SQLite and start the normal daemon
 loop. This provides safe upgrades after managed processes finish, without
-requiring a second daemon or a public upgrade command.
+requiring a second daemon or a top-level upgrade command.
 
-An idle timeout may later allow the daemon to exit cleanly instead of
-re-execing. The next CLI invocation would start the newly installed binary.
-That is a simpler fallback, but it does not upgrade a daemon while processes
-remain active.
+## Restart-active Re-exec
 
-## Active-Process Milestone
+The configured restart-active path is the initial solution for users who accept
+temporary downtime. It deliberately reaches the idle re-exec path instead of
+trying to transfer live pipes or child wait handles.
+
+When `active_processes` is `restart`, or when
+`park daemon reexec --force` is used, the daemon must:
+
+1. Enter `quiescing` and stop accepting new lifecycle work.
+2. Snapshot every active record, its launch generation, and its exact restart
+   command into a private restart plan before stopping anything.
+3. Stop each active process group with the existing graceful-stop and
+   escalation semantics.
+4. Abort if any group cannot reach a safe terminal state. Restart every record
+   already stopped by the plan, discard the plan, and keep the old daemon
+   serving.
+5. Re-exec only after every planned record is terminal and all monitor and
+   capture tasks have completed.
+6. Have the new image consume the restart plan and invoke the normal retained
+   record start path for each planned record.
+7. Persist individual restart failures while continuing to attempt the
+   remaining records, then remove the completed plan atomically.
+
+With the default `active_processes = defer` policy, an automatic version
+mismatch or an unforced `park daemon reexec` returns a structured deferred
+result and does not run the original request against the older daemon. The
+user can wait for an idle daemon, change the global policy, or use `--force`.
+
+## Development Todo
+
+Tasks are ordered by dependency. A later milestone must not be marked complete
+until the preceding milestone's tests pass. The implementation direction is
+fixed by the design above; these are execution tasks, not open design choices.
+
+### Milestone 0: Contract and Primitives
+
+- [ ] [REXEC-M0-01] Add the client version handshake to the daemon connection
+  path.
+- [ ] [REXEC-M0-02] Add the internal `reexec` IPC operation with candidate
+  executable path and version fields.
+- [ ] [REXEC-M0-03] Add public daemon-management parsing for `park daemon
+  status`, `park daemon reexec`, and `park daemon config`.
+- [ ] [REXEC-M0-04] Add built-in configuration defaults and load the optional
+  `$XDG_CONFIG_HOME/park/config.toml` file with its documented fallback.
+- [ ] [REXEC-M0-05] Implement `daemon.reexec.active_processes` with `defer` as
+  the default and `restart` as the opt-in value.
+- [ ] [REXEC-M0-06] Implement the managed-process restart policy and bounded
+  backoff configuration with `never` as the default.
+- [ ] [REXEC-M0-07] Implement `park daemon status` and `park daemon config`
+  output, including JSON output for scripts.
+- [ ] [REXEC-M0-08] Add the retryable daemon-restarting response used while
+  requests are quiesced.
+- [ ] [REXEC-M0-09] Add a versioned private handoff manifest under the runtime
+  directory with bounded size, private permissions, generation, and expiry.
+- [ ] [REXEC-M0-10] Add the inherited descriptor table with fixed descriptor
+  roles and strict `FD_CLOEXEC` handling.
+- [ ] [REXEC-M0-11] Add daemon generations and per-record launch generations
+  to reject stale monitor updates.
+- [ ] [REXEC-M0-12] Expose the package, IPC protocol, and handoff compatibility
+  identity through the version probe.
+- [ ] [REXEC-M0-13] Validate the candidate executable path and require an
+  atomically replaced executable for re-exec.
+
+### Milestone 1: Safe Idle Re-exec
+
+- [ ] [REXEC-M1-01] Add daemon runtime phases for `serving`, `quiescing`, and
+  `handing_off`.
+- [ ] [REXEC-M1-02] Implement the quiescing barrier for a daemon with no active
+  process, monitor, lifecycle mutation, or long-lived IPC stream.
+- [ ] [REXEC-M1-03] Implement listener descriptor inheritance and reconstruction without
+  unlinking or rebinding the Unix socket.
+- [ ] [REXEC-M1-04] Implement daemon-lock descriptor inheritance without releasing and
+  reacquiring the kernel lock.
+- [ ] [REXEC-M1-05] Implement the handoff startup path separately from ordinary daemon
+  startup, with strict descriptor validation.
+- [ ] [REXEC-M1-06] Implement same-PID `execve` using the validated candidate
+  executable path.
+- [ ] [REXEC-M1-07] Preserve the daemon PID marker and endpoint ownership across successful
+  re-exec.
+- [ ] [REXEC-M1-08] On preparation or `execve` failure, return to the old serving image
+  without changing records, logs, socket, lock, or process groups.
+- [ ] [REXEC-M1-09] Add idle re-exec unit and integration tests before attempting active
+  restart-active handling.
+- [ ] [REXEC-M1-10] Implement client mismatch handling: request re-exec, wait
+  for readiness, and retry the original operation.
+
+### Milestone 2: Restart-active Re-exec
+
+- [ ] [REXEC-M2-01] Snapshot every active record and persist a restart plan before
+  stopping any managed process.
+- [ ] [REXEC-M2-02] Stop active process groups using the existing graceful stop
+  and escalation semantics.
+- [ ] [REXEC-M2-03] Abort and roll back the restart plan when any active process
+  cannot reach a terminal state safely.
+- [ ] [REXEC-M2-04] Re-exec only after all planned records are terminal and no
+  monitor or capture task remains active.
+- [ ] [REXEC-M2-05] Consume the restart plan in the new image and restart the
+  records that were active before re-exec.
+- [ ] [REXEC-M2-06] Persist individual restart failures without preventing the
+  remaining planned records from being attempted.
+- [ ] [REXEC-M2-07] Implement `park daemon reexec --force` as a one-shot
+  `restart` policy override.
+- [ ] [REXEC-M2-08] Add integration tests for configured restart-active and
+  explicit forced re-exec, including partial stop and restart failures.
+
+### Milestone 3: Preserved-process Handoff
+
+- [ ] [REXEC-M3-01] Implement the supervisor handoff-grace lease.
+- [ ] [REXEC-M3-02] Bind the lease to a private runtime location, daemon generation, and
+  verified process identity.
+- [ ] [REXEC-M3-03] Ensure an intentional re-exec does not trigger `PDEATHSIG` group cleanup.
+- [ ] [REXEC-M3-04] Ensure a genuine daemon crash still terminates the managed group after
+  the bounded grace period.
+- [ ] [REXEC-M3-05] Reattach to each direct supervisor child with Linux
+  `waitpid(WNOHANG)` polling and preserve its exact exit status.
+- [ ] [REXEC-M3-06] Transfer every active stdout and stderr read descriptor with
+  an explicit record-key and stream mapping.
+- [ ] [REXEC-M3-07] Reconstruct independent capture tasks in the new image
+  without closing a live pipe during the transition.
+- [ ] [REXEC-M3-08] Reattach termination monitoring to every active supervisor
+  and validate PID, start time, process group, and session before accepting it.
+- [ ] [REXEC-M3-09] Add launch-generation checks to terminal persistence and
+  monitor retry paths.
+- [ ] [REXEC-M3-10] Implement retryable reconnect behavior for active
+  `logs --follow` and `wait` clients during quiescing.
+- [ ] [REXEC-M3-11] Add integration tests for active output capture, exact
+  terminal outcomes, signals, and concurrent lifecycle requests during handoff.
+
+### Milestone 4: Hardening and Release Readiness
+
+- [ ] [REXEC-M4-01] Reject truncated, oversized, duplicated, stale, and version-mismatched
+  handoff metadata.
+- [ ] [REXEC-M4-02] Confirm inherited descriptors cannot cause access to unrelated sockets,
+  files, records, or process groups.
+- [ ] [REXEC-M4-03] Confirm SQLite schema validation and any migration are transactional
+  before active monitoring resumes.
+- [ ] [REXEC-M4-04] Test concurrent CLI requests, large interleaved output, terminal exits,
+  signals, and daemon failure during each handoff phase.
+- [ ] [REXEC-M4-05] Add Linux end-to-end coverage for idle, restart-active, and
+  preserved-process re-exec.
+- [ ] [REXEC-M4-06] Update `docs/architecture.md` and
+  `docs/low-level-architecture.md` once the implementation behavior is fixed.
+- [ ] [REXEC-M4-07] Update installation and daemon-management documentation to
+  describe external binary upgrades and the re-exec command flow.
+
+## Preserved-Process Milestone
 
 Active-process re-exec is complete only when the following are true:
 
@@ -337,10 +570,10 @@ Active-process re-exec is complete only when the following are true:
 - Stale monitor writes cannot overwrite a later lifecycle generation.
 - Existing process groups survive a successful upgrade.
 - Failed upgrade initialization cannot kill active groups.
-- Old and new clients receive bounded, explicit behavior during the brief
-  quiescing window.
+- Clients connected before and after handoff receive bounded, explicit behavior
+  during the brief quiescing window.
 
-A per-record generation or launch token should be included in the handoff and
+A per-record generation or launch token must be included in the handoff and
 used with existing compare-and-swap persistence. PID equality alone is not
 enough to reject stale monitor updates.
 
@@ -379,13 +612,14 @@ operations.
 This design does not introduce:
 
 - A package-manager detector or installation-provenance database.
-- A public `park upgrade` command.
+- A public top-level `park upgrade` command. Daemon re-exec is exposed under
+  `park daemon reexec`.
 - Automatic process restart after reboot.
 - A second daemon competing for the existing endpoint.
 - A guarantee that a daemon binary is upgraded by merely replacing its file
   unless the running daemon has re-exec support.
 
-Until the active handoff milestone is complete, replacing the installed binary
-may leave an already-running daemon on the previous image. Its managed
-processes remain safe and functional; new daemon behavior takes effect after a
-safe idle re-exec or daemon restart.
+Until the preserved-process milestone is complete, the default policy defers
+re-exec while managed processes are active. The configured restart-active
+policy or `park daemon reexec --force` instead stops and restarts those records
+before the new image resumes service.
