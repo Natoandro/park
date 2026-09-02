@@ -244,7 +244,8 @@ configuration-free launch form and the existing project/name identity.
    Add an explicit handoff path that lets a new Park binary replace a running
    daemon without interrupting managed process groups. Preserve socket and lock
    ownership and supervisor relationships during the handoff, and reject
-   incompatible upgrades safely.
+   incompatible upgrades safely. See the [internal daemon re-exec
+   design](daemon-reexec.md).
 - [ ] **13. Store process names as text**
    Migrate the SQLite process-name column from `BLOB` to `TEXT` now that process
    names use a restricted ASCII character set. Keep the current BLOB schema until
