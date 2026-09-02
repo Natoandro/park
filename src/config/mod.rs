@@ -19,13 +19,25 @@ pub struct Config {
 
 impl Config {
     pub fn load(environment: &XdgEnvironment) -> Result<Self, ConfigError> {
+        Ok(Self::load_with_source(environment)?.config)
+    }
+
+    pub(crate) fn load_with_source(
+        environment: &XdgEnvironment,
+    ) -> Result<LoadedConfig, ConfigError> {
         let Some(path) = config_path(environment) else {
-            return Ok(Self::default());
+            return Ok(LoadedConfig {
+                config: Self::default(),
+                source: ConfigSource::Defaults,
+            });
         };
         let contents = match fs::read_to_string(&path) {
             Ok(contents) => contents,
             Err(source) if source.kind() == io::ErrorKind::NotFound => {
-                return Ok(Self::default());
+                return Ok(LoadedConfig {
+                    config: Self::default(),
+                    source: ConfigSource::Defaults,
+                });
             }
             Err(source) => return Err(ConfigError::Read { path, source }),
         };
@@ -33,15 +45,31 @@ impl Config {
             path: path.clone(),
             source,
         })?;
-        config
-            .validate()
-            .map_err(|message| ConfigError::Invalid { path, message })?;
-        Ok(config)
+        config.validate().map_err(|message| ConfigError::Invalid {
+            path: path.clone(),
+            message,
+        })?;
+        Ok(LoadedConfig {
+            config,
+            source: ConfigSource::File(path),
+        })
     }
 
     pub fn validate(&self) -> Result<(), String> {
         self.managed_processes.restart.validate()
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct LoadedConfig {
+    pub(crate) config: Config,
+    pub(crate) source: ConfigSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ConfigSource {
+    Defaults,
+    File(PathBuf),
 }
 
 pub fn config_path(environment: &XdgEnvironment) -> Option<PathBuf> {

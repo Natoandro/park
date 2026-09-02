@@ -3,10 +3,11 @@ use std::{env, io::Write, process};
 use park_cli::{
     CommandResult, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, Invocation,
     IpcLogOptions, Operation, ResultStatus, StoragePaths, parse_invocation, render_json,
-    request_for_clean, request_for_launch, request_for_logs, request_for_ps, request_for_remove,
-    request_for_restart, request_for_signal, request_for_start, request_for_status,
-    request_for_stop, request_for_wait, request_with_daemon_start, resolve_current_project,
-    run_daemon, skills_help_result, stream_request_with_daemon_start,
+    request_for_clean, request_for_daemon_config, request_for_daemon_status, request_for_launch,
+    request_for_logs, request_for_ps, request_for_remove, request_for_restart, request_for_signal,
+    request_for_start, request_for_status, request_for_stop, request_for_wait,
+    request_with_daemon_start, resolve_current_project, run_daemon, skills_help_result,
+    stream_request_with_daemon_start,
 };
 use serde_json::Value;
 
@@ -145,11 +146,25 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
     if let Invocation::Operation(Operation::HelpSkills { json }) = &invocation {
         return skills_help_result(*json);
     }
-    if matches!(&invocation, Invocation::Operation(Operation::Daemon(_))) {
-        return CommandResult::error(
-            ResultStatus::Failure,
-            "daemon-management commands are not implemented",
-        );
+    if let Invocation::Operation(Operation::Daemon(operation)) = &invocation {
+        let paths = match StoragePaths::from_process_environment() {
+            Ok(paths) => paths,
+            Err(error) => return CommandResult::error(ResultStatus::Failure, error.to_string()),
+        };
+        let request = match operation {
+            park_cli::DaemonOperation::Status { .. } => request_for_daemon_status(1),
+            park_cli::DaemonOperation::Config { .. } => request_for_daemon_config(1),
+            park_cli::DaemonOperation::Reexec { .. } => {
+                return CommandResult::error(
+                    ResultStatus::Failure,
+                    "daemon reexec is not implemented",
+                );
+            }
+        };
+        return match request_with_daemon_start(&paths, &request).await {
+            Ok(response) => response.result,
+            Err(error) => CommandResult::error(ResultStatus::Failure, error.to_string()),
+        };
     }
 
     let paths = match StoragePaths::from_process_environment() {

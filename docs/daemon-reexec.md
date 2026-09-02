@@ -468,7 +468,7 @@ fixed by the design above; these are execution tasks, not open design choices.
   the default and `restart` as the opt-in value.
 - [x] [REXEC-M0-06] Implement the managed-process restart policy and bounded
   backoff configuration with `never` as the default.
-- [ ] [REXEC-M0-07] Implement `park daemon status` and `park daemon config`
+- [x] [REXEC-M0-07] Implement `park daemon status` and `park daemon config`
   output, including JSON output for scripts.
 - [ ] [REXEC-M0-08] Add the retryable daemon-restarting response used while
   requests are quiesced.

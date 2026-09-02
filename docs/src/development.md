@@ -25,6 +25,8 @@ The current feature set includes:
 - Stable JSON output and lifecycle exit codes for scripts and coding agents.
 - Optional global configuration file parsing and validation for daemon and
   managed-process policies.
+- Daemon runtime and effective configuration inspection through `park daemon
+  status` and `park daemon config`.
 
 The normal launch form remains:
 

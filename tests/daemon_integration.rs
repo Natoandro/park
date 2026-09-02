@@ -43,6 +43,13 @@ impl TestEnvironment {
         self.runtime_dir().join("park/daemon.sock")
     }
 
+    fn write_config(&self, contents: &str) {
+        let path = self.root.join("config/park/config.toml");
+        fs::create_dir_all(path.parent().expect("config parent should exist"))
+            .expect("config directory should be created");
+        fs::write(path, contents).expect("config should be written");
+    }
+
     fn daemon_pid(&self) -> Option<i32> {
         fs::read_to_string(self.pid_path())
             .ok()
@@ -56,8 +63,64 @@ fn run_with_root(root: &Path, args: &[&str]) -> Output {
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .env("XDG_STATE_HOME", root.join("state"))
         .env("XDG_RUNTIME_DIR", root.join("runtime"))
+        .env("XDG_CONFIG_HOME", root.join("config"))
         .output()
         .expect("park command should run")
+}
+
+#[test]
+fn reports_daemon_status_as_structured_data() {
+    let environment = TestEnvironment::new();
+    let output = environment.run(&["daemon", "status", "--json"]);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    let result: Value = serde_json::from_slice(&output.stdout).expect("result should be JSON");
+    assert_eq!(result["status"], "success");
+    assert!(result["data"]["pid"].as_u64().is_some());
+    assert_eq!(result["data"]["binary_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(result["data"]["protocol_version"], 1);
+    assert_eq!(result["data"]["handoff_version"], 0);
+    assert_eq!(result["data"]["generation"], 1);
+    assert_eq!(result["data"]["reexec_state"], "serving");
+    assert_eq!(result["data"]["active_record_count"], 0);
+}
+
+#[test]
+fn reports_effective_daemon_configuration_and_source() {
+    let environment = TestEnvironment::new();
+    let output = environment.run(&["daemon", "config", "--json"]);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    let result: Value = serde_json::from_slice(&output.stdout).expect("result should be JSON");
+    assert_eq!(result["status"], "success");
+    assert_eq!(result["data"]["source"], "defaults");
+    assert!(result["data"]["path"].as_str().is_some());
+    assert_eq!(
+        result["data"]["config"]["daemon"]["reexec"]["active_processes"],
+        "defer"
+    );
+    assert_eq!(
+        result["data"]["config"]["managed_processes"]["restart"]["policy"],
+        "never"
+    );
+}
+
+#[test]
+fn reports_values_from_the_user_config_file() {
+    let environment = TestEnvironment::new();
+    environment.write_config(
+        "[daemon.reexec]\nactive_processes = \"restart\"\n[managed_processes.restart]\npolicy = \"on-failure\"\n",
+    );
+    let output = environment.run(&["daemon", "config", "--json"]);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    let result: Value = serde_json::from_slice(&output.stdout).expect("result should be JSON");
+    assert_eq!(result["data"]["source"], "file");
+    assert_eq!(
+        result["data"]["config"]["daemon"]["reexec"]["active_processes"],
+        "restart"
+    );
+    assert_eq!(
+        result["data"]["config"]["managed_processes"]["restart"]["policy"],
+        "on-failure"
+    );
 }
 
 impl Drop for TestEnvironment {

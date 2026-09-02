@@ -89,8 +89,8 @@ park <name> -- <command> [arguments...]
 
 Daemon-management commands use an explicit namespace: `park daemon status`,
 `park daemon reexec`, and `park daemon config`. Their public grammar is in
-place, while their operational handlers are delivered by later re-exec
-milestones.
+place. Status and config inspection are available; re-exec execution remains a
+later milestone.
 
 The command and argument vector are preserved exactly. Later `restart` and
 `start` operations use those recorded arguments and the recorded working

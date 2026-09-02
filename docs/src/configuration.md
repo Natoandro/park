@@ -91,6 +91,27 @@ Automatic process restart is not active yet. In particular, this configuration
 does not change the behavior of explicit `park restart`, `park start`, or an
 intentional `park stop`.
 
+## Inspect Daemon Settings
+
+Inspect the daemon runtime and effective configuration without selecting a
+project:
+
+```bash
+park daemon status
+park daemon status --json
+park daemon config
+park daemon config --json
+```
+
+`daemon status` reports the daemon PID, binary and protocol versions, handoff
+format version, daemon generation, re-exec state, and active-record count. The
+current implementation reports handoff version `0` and generation `1` until
+handoff manifests and persistent daemon generations are implemented.
+
+`daemon config` reports the effective values, whether they came from built-in
+defaults or the config file, and the candidate config path. JSON output keeps
+these fields structured for scripts.
+
 ## Scope And Status
 
 The configuration file is optional and user-scoped. Park does not currently

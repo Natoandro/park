@@ -231,10 +231,12 @@ park signal <name> <SIGNAL>
 park rm <name> [--keep-logs]
 park clean
 park wait <name> (--state STATE | --match TEXT | --exit) [--timeout DURATION]
+park daemon status [--json]
+park daemon config [--json]
 park help --skills [--json]
 ```
 
-`park logs` is the canonical log interface. JSON output, stable exit codes, predictable lookup, and non-interactive operation are public requirements because Park is intended to work well in scripts and coding-agent workflows.
+`park logs` is the canonical log interface. `park daemon status` and `park daemon config` inspect the per-user daemon without selecting a project. JSON output, stable exit codes, predictable lookup, and non-interactive operation are public requirements because Park is intended to work well in scripts and coding-agent workflows.
 
 `stop` sends SIGTERM to the managed process group and escalates to SIGKILL after a two-second grace period; `--force` sends SIGKILL immediately. `signal` accepts `HUP`, `INT`, `QUIT`, `TERM`, `USR1`, `USR2`, `STOP`, `CONT`, and `KILL`, with an optional `SIG` prefix. Numeric signal values are not accepted. `restart` stops an active process before starting it again from its recorded command, while `start` only starts a retained terminal record. Restart and start append to the existing stream logs.
 

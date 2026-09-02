@@ -30,6 +30,8 @@ pub struct IpcRequest {
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum IpcOperation {
     Ping,
+    DaemonStatus,
+    DaemonConfig,
     Reexec {
         candidate_path: PathBuf,
         candidate_version: String,
@@ -306,6 +308,14 @@ pub fn request_for_ps(request_id: u64, project_path: ProjectPath) -> IpcRequest 
     IpcRequest::new(request_id, IpcOperation::Ps { project_path })
 }
 
+pub fn request_for_daemon_status(request_id: u64) -> IpcRequest {
+    IpcRequest::new(request_id, IpcOperation::DaemonStatus)
+}
+
+pub fn request_for_daemon_config(request_id: u64) -> IpcRequest {
+    IpcRequest::new(request_id, IpcOperation::DaemonConfig)
+}
+
 pub fn request_for_reexec(
     request_id: u64,
     candidate_path: PathBuf,
@@ -433,6 +443,27 @@ mod tests {
             serde_json::to_string(&request).expect("request should serialize"),
             format!(
                 r#"{{"version":1,"request_id":7,"client_version":"{}","operation":"status","key":{{"project_path":"/project","name":"646576"}}}}"#,
+                CLIENT_VERSION
+            )
+        );
+    }
+
+    #[test]
+    fn serializes_daemon_inspection_requests() {
+        let status = request_for_daemon_status(10);
+        assert_eq!(
+            serde_json::to_string(&status).expect("request should serialize"),
+            format!(
+                r#"{{"version":1,"request_id":10,"client_version":"{}","operation":"daemon_status"}}"#,
+                CLIENT_VERSION
+            )
+        );
+
+        let config = request_for_daemon_config(11);
+        assert_eq!(
+            serde_json::to_string(&config).expect("request should serialize"),
+            format!(
+                r#"{{"version":1,"request_id":11,"client_version":"{}","operation":"daemon_config"}}"#,
                 CLIENT_VERSION
             )
         );

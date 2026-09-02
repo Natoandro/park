@@ -11,6 +11,7 @@ use thiserror::Error;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::time::{Duration, timeout};
 
+use crate::config::{ConfigSource, LoadedConfig};
 use crate::ipc::{
     IpcError, IpcOperation, IpcRequest, IpcResponse, PROTOCOL_VERSION, read_request, record_value,
     write_response,
@@ -30,6 +31,9 @@ mod wait;
 pub const INTERNAL_DAEMON_ARGUMENT: &str = "--internal-daemon";
 pub const INTERNAL_SUPERVISOR_ARGUMENT: &str = "--internal-supervisor";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const HANDOFF_VERSION: u16 = 0;
+const DAEMON_GENERATION: u64 = 1;
+const REEXEC_STATE: &str = "serving";
 
 #[derive(Debug)]
 pub struct DaemonLock {
@@ -321,6 +325,8 @@ fn operation_name(operation: &IpcOperation) -> Option<&OsStr> {
         | IpcOperation::Start { key }
         | IpcOperation::Remove { key, .. } => Some(key.name()),
         IpcOperation::Ping
+        | IpcOperation::DaemonStatus
+        | IpcOperation::DaemonConfig
         | IpcOperation::Reexec { .. }
         | IpcOperation::Ps { .. }
         | IpcOperation::Clean => None,
@@ -407,6 +413,8 @@ fn canonicalize_operation(
             keep_logs,
         }),
         IpcOperation::Ping => Ok(IpcOperation::Ping),
+        IpcOperation::DaemonStatus => Ok(IpcOperation::DaemonStatus),
+        IpcOperation::DaemonConfig => Ok(IpcOperation::DaemonConfig),
         IpcOperation::Reexec {
             candidate_path,
             candidate_version,
@@ -443,6 +451,8 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
 
     match request.operation {
         IpcOperation::Ping => IpcResponse::success(request.request_id, None),
+        IpcOperation::DaemonStatus => daemon_status(storage, request.request_id),
+        IpcOperation::DaemonConfig => daemon_config(request.request_id),
         IpcOperation::Reexec { .. } => IpcResponse::error(
             request.request_id,
             ResultStatus::Failure,
@@ -518,6 +528,58 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
             "lifecycle requests require the daemon dispatcher",
         ),
     }
+}
+
+fn daemon_status(storage: &Storage, request_id: u64) -> IpcResponse {
+    let active_record_count = match storage.list_records() {
+        Ok(records) => records
+            .iter()
+            .filter(|record| !record.state().is_terminal())
+            .count(),
+        Err(error) => return storage_error(request_id, error),
+    };
+    IpcResponse::success(
+        request_id,
+        Some(serde_json::json!({
+            "pid": std::process::id(),
+            "binary_version": env!("CARGO_PKG_VERSION"),
+            "protocol_version": PROTOCOL_VERSION,
+            "handoff_version": HANDOFF_VERSION,
+            "generation": DAEMON_GENERATION,
+            "reexec_state": REEXEC_STATE,
+            "active_record_count": active_record_count,
+        })),
+    )
+}
+
+fn daemon_config(request_id: u64) -> IpcResponse {
+    let environment = crate::storage::XdgEnvironment::from_process();
+    let loaded = match crate::config::Config::load_with_source(&environment) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            return IpcResponse::error(request_id, ResultStatus::Failure, error.to_string());
+        }
+    };
+    match config_value(loaded) {
+        Ok(value) => IpcResponse::success(request_id, Some(value)),
+        Err(error) => IpcResponse::error(request_id, ResultStatus::Failure, error),
+    }
+}
+
+fn config_value(loaded: LoadedConfig) -> Result<serde_json::Value, String> {
+    let (source, path) = match loaded.source {
+        ConfigSource::Defaults => (
+            "defaults",
+            crate::config::config_path(&crate::storage::XdgEnvironment::from_process()),
+        ),
+        ConfigSource::File(path) => ("file", Some(path)),
+    };
+    let config = serde_json::to_value(loaded.config).map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({
+        "source": source,
+        "path": path.map(|path| path.to_string_lossy().into_owned()),
+        "config": config,
+    }))
 }
 
 fn incompatible_client_response(request_id: u64, client_version: &str) -> IpcResponse {

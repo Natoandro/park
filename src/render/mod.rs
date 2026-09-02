@@ -4,6 +4,8 @@ use serde_json::Value;
 
 use park_cli::CommandResult;
 
+mod daemon;
+
 pub fn decode_json_result(result: &mut CommandResult<Value>) {
     if let Some(data) = &mut result.data {
         decode_value(data);
@@ -25,6 +27,12 @@ pub fn human_result(result: &CommandResult<Value>) -> String {
     }
     if is_process_record(data) {
         return human_process_record(data);
+    }
+    if data.get("reexec_state").is_some() {
+        return daemon::human_status(data);
+    }
+    if data.get("config").is_some() && data.get("source").is_some() {
+        return daemon::human_config(data);
     }
     if let Some(removed) = data.get("removed").and_then(Value::as_u64) {
         return format!("Removed {removed} process record(s).\n");
