@@ -34,25 +34,23 @@ fn only_one_owner_can_hold_the_daemon_lock() {
 fn rejects_unknown_protocol_versions() {
     let paths = test_paths();
     let storage = Storage::new(paths);
-    let response = handle_request(
-        &storage,
-        IpcRequest {
-            version: PROTOCOL_VERSION + 1,
-            request_id: 9,
-            operation: IpcOperation::Status {
-                key: crate::process::ProcessKey::new(
-                    ProjectPath::from_canonical("/project".into()),
-                    OsString::from("dev"),
-                ),
-            },
+    let mut request = IpcRequest::new(
+        9,
+        IpcOperation::Status {
+            key: crate::process::ProcessKey::new(
+                ProjectPath::from_canonical("/project".into()),
+                OsString::from("dev"),
+            ),
         },
     );
+    request.version = PROTOCOL_VERSION + 1;
+    let response = handle_request(&storage, request);
     assert_eq!(response.result.status, ResultStatus::Failure);
 }
 
 #[test]
-fn returns_the_daemon_version_for_a_handshake() {
-    let root = std::env::temp_dir().join(format!("park-handshake-{}", std::process::id()));
+fn rejects_mismatched_client_versions() {
+    let root = std::env::temp_dir().join(format!("park-client-version-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let paths = StoragePaths::from_environment(&crate::storage::XdgEnvironment {
         state_home: Some(root.join("state")),
@@ -64,30 +62,9 @@ fn returns_the_daemon_version_for_a_handshake() {
         .ensure_directories()
         .expect("storage should initialize");
     let storage = Storage::new(paths);
-    let response = handle_request(
-        &storage,
-        IpcRequest {
-            version: PROTOCOL_VERSION,
-            request_id: 0,
-            operation: IpcOperation::Handshake {
-                client_version: "0.2.1".to_owned(),
-            },
-        },
-    );
-    assert_eq!(response.result.status, ResultStatus::Success);
-    let data = response.result.data.expect("handshake data should exist");
-    assert_eq!(data["client_version"], "0.2.1");
-    assert_eq!(data["daemon_version"], env!("CARGO_PKG_VERSION"));
-    let mismatch = handle_request(
-        &storage,
-        IpcRequest {
-            version: PROTOCOL_VERSION,
-            request_id: 1,
-            operation: IpcOperation::Handshake {
-                client_version: "0.0.0".to_owned(),
-            },
-        },
-    );
+    let mut request = IpcRequest::new(0, IpcOperation::Ping);
+    request.client_version = "0.0.0".to_owned();
+    let mismatch = handle_request(&storage, request);
     assert_eq!(mismatch.result.status, ResultStatus::Failure);
     assert!(
         mismatch
@@ -129,13 +106,12 @@ fn ps_and_status_return_persisted_records() {
 
     let ps = handle_request(
         &storage,
-        IpcRequest {
-            version: PROTOCOL_VERSION,
-            request_id: 1,
-            operation: IpcOperation::Ps {
+        IpcRequest::new(
+            1,
+            IpcOperation::Ps {
                 project_path: project,
             },
-        },
+        ),
     );
     assert_eq!(ps.result.status, ResultStatus::Success);
     assert_eq!(
@@ -147,14 +123,7 @@ fn ps_and_status_return_persisted_records() {
         Some(1)
     );
 
-    let status = handle_request(
-        &storage,
-        IpcRequest {
-            version: PROTOCOL_VERSION,
-            request_id: 2,
-            operation: IpcOperation::Status { key },
-        },
-    );
+    let status = handle_request(&storage, IpcRequest::new(2, IpcOperation::Status { key }));
     assert_eq!(status.result.status, ResultStatus::Success);
     let _ = fs::remove_dir_all(root);
 }

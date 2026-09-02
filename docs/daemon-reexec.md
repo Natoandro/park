@@ -114,7 +114,7 @@ multiplier = 2.0
 The default `active_processes` value is `defer`. The supported alternative is
 `restart`, which stops active records with normal lifecycle semantics, re-execs
 while idle, and restarts the records that were active before the operation.
-The setting applies to automatic version-mismatch handshakes and
+The setting applies to automatic version-mismatch checks on requests and
 `park daemon reexec`. A command-line `--force` override selects `restart` for
 one explicit re-exec without modifying configuration.
 
@@ -171,24 +171,22 @@ The external installation method remains responsible for replacing the
 executable. Park does not need to know whether the user used Cargo, a package
 manager, or a release archive.
 
-The daemon needs a way to learn that its executable has been replaced. The
-chosen trigger is an internal `reexec` IPC operation initiated by the upgraded
-CLI. Each CLI connection begins with a version handshake. When the daemon
-reports a different binary version, the CLI sends the candidate executable
-path and version in the re-exec request, waits for the daemon to become ready,
-and retries the original request.
+The daemon needs a way to learn that its executable has been replaced. Every
+`IpcRequest` carries the client compatibility identity. Before dispatching the
+operation, the daemon compares that identity with its own. When the client is
+newer, the daemon may perform the internal `reexec` operation, wait until it is
+ready, and let the client retry the original request.
 
 The client supplies its identity, but the daemon is the compatibility
-authority. The daemon compares the client identity with its own and rejects an
-incompatible handshake before dispatching any managed-process operation. The
-client only validates that the response is structurally complete and echoes the
-identity it sent.
+authority. It rejects an incompatible request before dispatching any
+managed-process operation. The client only reports its identity and handles the
+daemon's compatibility or retryable-restart response.
 
 This keeps the upgrade flow automatic without adding a public `park upgrade`
 command: the user upgrades through the original installation method, then the
-next normal Park invocation upgrades the daemon. The handshake and re-exec
-operation are part of the re-exec-capable protocol generation; no fallback is
-required for pre-re-exec daemons.
+next normal Park invocation can upgrade the daemon. The per-request identity
+and re-exec operation are part of the re-exec-capable protocol generation; no
+fallback is required for pre-re-exec daemons.
 
 Installers should replace binaries atomically. An installer that writes into a
 running executable in place is not a supported upgrade primitive. If the path
@@ -196,7 +194,7 @@ is missing, no longer executable, or cannot be inspected, the daemon should
 continue running the old image and report a diagnostic through internal
 logging, not terminate managed processes.
 
-The handshake outcomes are:
+The per-request compatibility outcomes are:
 
 - Equal client and daemon compatibility identities: continue normally.
 - Lower client identity: return a structured incompatibility error; never
@@ -455,8 +453,8 @@ fixed by the design above; these are execution tasks, not open design choices.
 
 ### Milestone 0: Contract and Primitives
 
-- [x] [REXEC-M0-01] Add the client version handshake to the daemon connection
-  path.
+- [x] [REXEC-M0-01] Add the client compatibility identity to every IPC request
+  and validate it in the daemon before dispatch.
 - [ ] [REXEC-M0-02] Add the internal `reexec` IPC operation with candidate
   executable path and version fields.
 - [ ] [REXEC-M0-03] Add public daemon-management parsing for `park daemon

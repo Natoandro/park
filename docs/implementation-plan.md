@@ -241,7 +241,7 @@ configuration-free launch form and the existing project/name identity.
    Consider Git-root resolution as an explicit policy, never as an implicit
    change to invocation-directory scoping.
  - [ ] **12. Graceful daemon upgrades**
-   Add daemon-management commands, version-handshake re-exec, the default
+   Add daemon-management commands, per-request compatibility checks, the default
    idle-safe policy, and opt-in stop/restart handling for active records before
    preserving active processes through descriptor handoff. See the [internal
    daemon re-exec design](daemon-reexec.md) for the ordered development todo.

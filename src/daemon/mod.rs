@@ -226,6 +226,12 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
             format!("unsupported IPC protocol version {}", request.version),
         ));
     }
+    if request.client_version != env!("CARGO_PKG_VERSION") {
+        return DispatchResponse::Single(incompatible_client_response(
+            request.request_id,
+            &request.client_version,
+        ));
+    }
 
     let request_id = request.request_id;
     let operation = match canonicalize_operation(request.operation) {
@@ -299,15 +305,7 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
         | IpcOperation::Clean) => {
             DispatchResponse::Single(control::handle(state, request_id, operation).await)
         }
-        operation => handle_request(
-            &state.storage,
-            IpcRequest {
-                version: PROTOCOL_VERSION,
-                request_id,
-                operation,
-            },
-        )
-        .into(),
+        operation => handle_request(&state.storage, IpcRequest::new(request_id, operation)).into(),
     }
 }
 
@@ -322,10 +320,7 @@ fn operation_name(operation: &IpcOperation) -> Option<&OsStr> {
         | IpcOperation::Restart { key }
         | IpcOperation::Start { key }
         | IpcOperation::Remove { key, .. } => Some(key.name()),
-        IpcOperation::Ping
-        | IpcOperation::Handshake { .. }
-        | IpcOperation::Ps { .. }
-        | IpcOperation::Clean => None,
+        IpcOperation::Ping | IpcOperation::Ps { .. } | IpcOperation::Clean => None,
     }
 }
 
@@ -409,9 +404,6 @@ fn canonicalize_operation(
             keep_logs,
         }),
         IpcOperation::Ping => Ok(IpcOperation::Ping),
-        IpcOperation::Handshake { client_version } => {
-            Ok(IpcOperation::Handshake { client_version })
-        }
         IpcOperation::Clean => Ok(IpcOperation::Clean),
     }
 }
@@ -431,6 +423,9 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
             format!("unsupported IPC protocol version {}", request.version),
         );
     }
+    if request.client_version != env!("CARGO_PKG_VERSION") {
+        return incompatible_client_response(request.request_id, &request.client_version);
+    }
 
     if let Err(error) = storage.reconcile(epoch_seconds(), record_is_alive) {
         return storage_error(request.request_id, error);
@@ -438,25 +433,6 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
 
     match request.operation {
         IpcOperation::Ping => IpcResponse::success(request.request_id, None),
-        IpcOperation::Handshake { client_version } => {
-            if client_version != env!("CARGO_PKG_VERSION") {
-                return IpcResponse::error(
-                    request.request_id,
-                    ResultStatus::Failure,
-                    format!(
-                        "incompatible Park versions: client {client_version}, daemon {}",
-                        env!("CARGO_PKG_VERSION")
-                    ),
-                );
-            }
-            IpcResponse::success(
-                request.request_id,
-                Some(serde_json::json!({
-                    "client_version": client_version,
-                    "daemon_version": env!("CARGO_PKG_VERSION"),
-                })),
-            )
-        }
         IpcOperation::Launch { .. } => IpcResponse::error(
             request.request_id,
             ResultStatus::Failure,
@@ -527,6 +503,17 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
             "lifecycle requests require the daemon dispatcher",
         ),
     }
+}
+
+fn incompatible_client_response(request_id: u64, client_version: &str) -> IpcResponse {
+    IpcResponse::error(
+        request_id,
+        ResultStatus::Failure,
+        format!(
+            "incompatible Park versions: client {client_version}, daemon {}",
+            env!("CARGO_PKG_VERSION")
+        ),
+    )
 }
 
 fn storage_error(request_id: u64, error: StorageError) -> IpcResponse {

@@ -13,6 +13,7 @@ use crate::project::ProjectPath;
 use crate::result::{CommandResult, ResultStatus};
 
 pub const PROTOCOL_VERSION: u16 = 1;
+pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -20,6 +21,7 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct IpcRequest {
     pub version: u16,
     pub request_id: u64,
+    pub client_version: String,
     #[serde(flatten)]
     pub operation: IpcOperation,
 }
@@ -28,9 +30,6 @@ pub struct IpcRequest {
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum IpcOperation {
     Ping,
-    Handshake {
-        client_version: String,
-    },
     Launch {
         project_path: ProjectPath,
         #[serde(with = "crate::os_string")]
@@ -80,6 +79,17 @@ pub enum IpcOperation {
         exit: bool,
         timeout_ms: Option<u64>,
     },
+}
+
+impl IpcRequest {
+    pub fn new(request_id: u64, operation: IpcOperation) -> Self {
+        Self {
+            version: PROTOCOL_VERSION,
+            request_id,
+            client_version: CLIENT_VERSION.to_owned(),
+            operation,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,19 +299,7 @@ pub async fn write_response(
 }
 
 pub fn request_for_ps(request_id: u64, project_path: ProjectPath) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Ps { project_path },
-    }
-}
-
-pub(crate) fn request_for_handshake(request_id: u64, client_version: String) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Handshake { client_version },
-    }
+    IpcRequest::new(request_id, IpcOperation::Ps { project_path })
 }
 
 pub fn request_for_launch(
@@ -310,30 +308,24 @@ pub fn request_for_launch(
     name: OsString,
     command: Vec<OsString>,
 ) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
+    IpcRequest::new(
         request_id,
-        operation: IpcOperation::Launch {
+        IpcOperation::Launch {
             project_path,
             name,
             command,
         },
-    }
+    )
 }
 
 pub fn request_for_status(request_id: u64, key: ProcessKey) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Status { key },
-    }
+    IpcRequest::new(request_id, IpcOperation::Status { key })
 }
 
 pub fn request_for_logs(request_id: u64, key: ProcessKey, options: IpcLogOptions) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
+    IpcRequest::new(
         request_id,
-        operation: IpcOperation::Logs {
+        IpcOperation::Logs {
             key,
             tail: options.tail,
             head: options.head,
@@ -342,55 +334,31 @@ pub fn request_for_logs(request_id: u64, key: ProcessKey, options: IpcLogOptions
             stdout: options.stdout,
             stderr: options.stderr,
         },
-    }
+    )
 }
 
 pub fn request_for_stop(request_id: u64, key: ProcessKey, force: bool) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Stop { key, force },
-    }
+    IpcRequest::new(request_id, IpcOperation::Stop { key, force })
 }
 
 pub fn request_for_signal(request_id: u64, key: ProcessKey, signal: String) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Signal { key, signal },
-    }
+    IpcRequest::new(request_id, IpcOperation::Signal { key, signal })
 }
 
 pub fn request_for_restart(request_id: u64, key: ProcessKey) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Restart { key },
-    }
+    IpcRequest::new(request_id, IpcOperation::Restart { key })
 }
 
 pub fn request_for_start(request_id: u64, key: ProcessKey) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Start { key },
-    }
+    IpcRequest::new(request_id, IpcOperation::Start { key })
 }
 
 pub fn request_for_remove(request_id: u64, key: ProcessKey, keep_logs: bool) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Remove { key, keep_logs },
-    }
+    IpcRequest::new(request_id, IpcOperation::Remove { key, keep_logs })
 }
 
 pub fn request_for_clean(request_id: u64) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        operation: IpcOperation::Clean,
-    }
+    IpcRequest::new(request_id, IpcOperation::Clean)
 }
 
 pub fn request_for_wait(
@@ -401,17 +369,16 @@ pub fn request_for_wait(
     exit: bool,
     timeout_ms: Option<u64>,
 ) -> IpcRequest {
-    IpcRequest {
-        version: PROTOCOL_VERSION,
+    IpcRequest::new(
         request_id,
-        operation: IpcOperation::Wait {
+        IpcOperation::Wait {
             key,
             state,
             match_text,
             exit,
             timeout_ms,
         },
-    }
+    )
 }
 
 pub fn record_value(record: &ProcessRecord) -> Result<serde_json::Value, IpcError> {
@@ -431,8 +398,6 @@ pub enum IpcError {
     Deserialize(#[source] serde_json::Error),
     #[error("invalid IPC protocol message: {0}")]
     Protocol(String),
-    #[error("daemon handshake failed: {0}")]
-    Handshake(String),
 }
 
 #[cfg(test)]
@@ -448,16 +413,10 @@ mod tests {
         let request = request_for_status(7, ProcessKey::new(project, OsString::from("dev")));
         assert_eq!(
             serde_json::to_string(&request).expect("request should serialize"),
-            r#"{"version":1,"request_id":7,"operation":"status","key":{"project_path":"/project","name":"646576"}}"#
-        );
-    }
-
-    #[test]
-    fn serializes_versioned_handshake_request() {
-        let request = request_for_handshake(0, "0.2.1".to_owned());
-        assert_eq!(
-            serde_json::to_string(&request).expect("request should serialize"),
-            r#"{"version":1,"request_id":0,"operation":"handshake","client_version":"0.2.1"}"#
+            format!(
+                r#"{{"version":1,"request_id":7,"client_version":"{}","operation":"status","key":{{"project_path":"/project","name":"646576"}}}}"#,
+                CLIENT_VERSION
+            )
         );
     }
 
@@ -501,7 +460,10 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_string(&request).expect("request should serialize"),
-            r#"{"version":1,"request_id":9,"operation":"wait","key":{"project_path":"/project","name":"646576"},"state":"running","match_text":null,"exit":false,"timeout_ms":500}"#
+            format!(
+                r#"{{"version":1,"request_id":9,"client_version":"{}","operation":"wait","key":{{"project_path":"/project","name":"646576"}},"state":"running","match_text":null,"exit":false,"timeout_ms":500}}"#,
+                CLIENT_VERSION
+            )
         );
     }
 
