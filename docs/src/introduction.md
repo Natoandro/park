@@ -1,5 +1,11 @@
 # Park
 
+[![Crates.io](https://img.shields.io/crates/v/park-cli.svg)](https://crates.io/crates/park-cli)
+[![Crates.io downloads](https://img.shields.io/crates/d/park-cli.svg)](https://crates.io/crates/park-cli)
+[![Documentation](https://docs.rs/park-cli/badge.svg)](https://docs.rs/park-cli)
+[![CI](https://github.com/Natoandro/park/actions/workflows/test.yml/badge.svg)](https://github.com/Natoandro/park/actions/workflows/test.yml)
+[![License](https://img.shields.io/crates/l/park-cli.svg)](https://github.com/Natoandro/park/blob/master/LICENSE)
+
 **Keep local development processes running, visible, and under control.**
 
 Park is a project-scoped background process manager for local development. It
