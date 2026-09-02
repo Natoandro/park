@@ -96,9 +96,9 @@ built-in defaults when no file exists. The initial configuration file is
 `$XDG_CONFIG_HOME/park/config.toml`, falling back to
 `$HOME/.config/park/config.toml`:
 
-TOML is chosen for a human-editable configuration file. Its parser dependency
-is approved and will be recorded with the implementation dependency changes;
-this design does not add that dependency yet.
+TOML is chosen for a human-editable configuration file. The approved `toml`
+parser is used for loading it; absent files use built-in defaults, while
+unreadable or malformed files produce errors.
 
 ```toml
 [daemon.reexec]
@@ -460,7 +460,7 @@ fixed by the design above; these are execution tasks, not open design choices.
   executable path and version fields.
 - [x] [REXEC-M0-03] Add public daemon-management parsing for `park daemon
   status`, `park daemon reexec`, and `park daemon config`.
-- [ ] [REXEC-M0-04] Add built-in configuration defaults and load the optional
+- [x] [REXEC-M0-04] Add built-in configuration defaults and load the optional
   `$XDG_CONFIG_HOME/park/config.toml` file with its documented fallback.
 - [ ] [REXEC-M0-05] Implement `daemon.reexec.active_processes` with `defer` as
   the default and `restart` as the opt-in value.

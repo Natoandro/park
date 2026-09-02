@@ -238,6 +238,7 @@ mod tests {
         let project = resolve_project(&project_dir).expect("project should resolve");
         let storage = Storage::new(
             StoragePaths::from_environment(&XdgEnvironment {
+                config_home: None,
                 state_home: Some(root.join("state")),
                 runtime_dir: Some(root.join("runtime")),
                 home: None,

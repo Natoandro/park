@@ -45,6 +45,7 @@ fn test_storage() -> (TempDir, Storage, ProjectPath) {
 
 fn test_paths(root: &TempDir) -> StoragePaths {
     StoragePaths::from_environment(&XdgEnvironment {
+        config_home: None,
         state_home: Some(root.path().join("state")),
         runtime_dir: Some(root.path().join("runtime")),
         home: None,
@@ -70,6 +71,7 @@ fn record(storage: &Storage, project: &ProjectPath, name: OsString) -> ProcessRe
 #[test]
 fn resolves_explicit_xdg_paths_and_safe_fallbacks() {
     let explicit = StoragePaths::from_environment(&XdgEnvironment {
+        config_home: None,
         state_home: Some(PathBuf::from("/state")),
         runtime_dir: Some(PathBuf::from("/run/user/1000")),
         home: Some(PathBuf::from("/home/user")),
@@ -79,6 +81,7 @@ fn resolves_explicit_xdg_paths_and_safe_fallbacks() {
     assert_eq!(explicit.runtime_dir(), PathBuf::from("/run/user/1000/park"));
 
     let fallback = StoragePaths::from_environment(&XdgEnvironment {
+        config_home: None,
         state_home: None,
         runtime_dir: None,
         home: Some(PathBuf::from("/home/user")),
@@ -95,6 +98,7 @@ fn resolves_explicit_xdg_paths_and_safe_fallbacks() {
 
     assert!(matches!(
         StoragePaths::from_environment(&XdgEnvironment {
+            config_home: None,
             state_home: None,
             runtime_dir: None,
             home: None,

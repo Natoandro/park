@@ -1,5 +1,6 @@
 mod cli;
 mod client;
+mod config;
 mod daemon;
 mod help;
 mod ipc;
@@ -13,6 +14,10 @@ mod storage;
 
 pub use cli::{DaemonOperation, Invocation, LogsArgs, Operation, WaitArgs, parse_invocation};
 pub use client::{ClientError, request_with_daemon_start, stream_request_with_daemon_start};
+pub use config::{
+    ActiveProcessPolicy, Config, ConfigError, DaemonConfig, ManagedProcessesConfig, ReexecConfig,
+    RestartConfig, RestartPolicy, config_path,
+};
 pub use daemon::{
     DaemonError, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, run as run_daemon,
 };

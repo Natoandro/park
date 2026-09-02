@@ -8,6 +8,7 @@ fn only_one_owner_can_hold_the_daemon_lock() {
     let root = std::env::temp_dir().join(format!("park-phase4-lock-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let paths = StoragePaths::from_environment(&crate::storage::XdgEnvironment {
+        config_home: None,
         state_home: Some(root.join("state")),
         runtime_dir: Some(root.join("runtime")),
         home: None,
@@ -53,6 +54,7 @@ fn rejects_mismatched_client_versions() {
     let root = std::env::temp_dir().join(format!("park-client-version-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let paths = StoragePaths::from_environment(&crate::storage::XdgEnvironment {
+        config_home: None,
         state_home: Some(root.join("state")),
         runtime_dir: Some(root.join("runtime")),
         home: None,
@@ -80,6 +82,7 @@ fn recognizes_reexec_as_an_internal_operation() {
     let root = std::env::temp_dir().join(format!("park-reexec-operation-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let paths = StoragePaths::from_environment(&crate::storage::XdgEnvironment {
+        config_home: None,
         state_home: Some(root.join("state")),
         runtime_dir: Some(root.join("runtime")),
         home: None,
@@ -117,6 +120,7 @@ fn ps_and_status_return_persisted_records() {
     let project = ProjectPath::from_canonical(project_path.clone());
     let storage = Storage::new(
         StoragePaths::from_environment(&crate::storage::XdgEnvironment {
+            config_home: None,
             state_home: Some(root.join("state")),
             runtime_dir: Some(root.join("runtime")),
             home: None,
@@ -223,6 +227,7 @@ fn rejects_invalid_daemon_project_paths() {
 
 fn test_paths() -> StoragePaths {
     StoragePaths::from_environment(&crate::storage::XdgEnvironment {
+        config_home: None,
         state_home: Some("/state".into()),
         runtime_dir: Some("/runtime".into()),
         home: None,

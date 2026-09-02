@@ -16,6 +16,7 @@ mod schema;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XdgEnvironment {
+    pub config_home: Option<PathBuf>,
     pub state_home: Option<PathBuf>,
     pub runtime_dir: Option<PathBuf>,
     pub home: Option<PathBuf>,
@@ -24,6 +25,7 @@ pub struct XdgEnvironment {
 impl XdgEnvironment {
     pub fn from_process() -> Self {
         Self {
+            config_home: env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
             state_home: env::var_os("XDG_STATE_HOME").map(PathBuf::from),
             runtime_dir: env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
             home: env::var_os("HOME").map(PathBuf::from),
