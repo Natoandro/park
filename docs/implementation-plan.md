@@ -109,6 +109,9 @@ Phase 4 implementation decisions:
 - A lock holder removes stale socket and PID marker files before binding the endpoint. It writes the current PID only after binding succeeds.
 - The first handlers are project-scoped `ps` and exact-key `status`; the CLI renders JSON directly from response data.
 - The daemon canonicalizes every project path received through IPC before dispatching a launch, list, or status operation. The client rejects a response whose version or request ID does not match its request and starts a daemon only after missing/refused-socket errors.
+- Re-exec configuration defaults to deferring when active records exist. The
+  global `restart` value is opt-in, while an explicit force request selects the
+  restart policy for that request without changing the configuration.
 
 ## Phase 5: Spawn, Capture, and Monitoring
 

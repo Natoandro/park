@@ -68,6 +68,18 @@ impl Default for ReexecConfig {
     }
 }
 
+impl ReexecConfig {
+    /// Return the policy for one re-exec request, applying the command-line
+    /// override without changing the configured default.
+    pub const fn effective_active_processes(&self, force: bool) -> ActiveProcessPolicy {
+        if force {
+            ActiveProcessPolicy::Restart
+        } else {
+            self.active_processes
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ActiveProcessPolicy {
@@ -181,6 +193,51 @@ mod tests {
         );
         assert_eq!(config.managed_processes.restart, RestartConfig::default());
         fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn defaults_reexec_active_processes_to_defer() {
+        let config = Config::default();
+        assert_eq!(
+            config.daemon.reexec.effective_active_processes(false),
+            ActiveProcessPolicy::Defer
+        );
+        assert_eq!(
+            config.daemon.reexec.effective_active_processes(true),
+            ActiveProcessPolicy::Restart
+        );
+    }
+
+    #[test]
+    fn restart_policy_is_opt_in_and_force_overrides_defer() {
+        let config = Config {
+            daemon: DaemonConfig {
+                reexec: ReexecConfig {
+                    active_processes: ActiveProcessPolicy::Restart,
+                },
+            },
+            ..Config::default()
+        };
+        assert_eq!(
+            config.daemon.reexec.effective_active_processes(false),
+            ActiveProcessPolicy::Restart
+        );
+        assert_eq!(
+            config.daemon.reexec.effective_active_processes(true),
+            ActiveProcessPolicy::Restart
+        );
+    }
+
+    #[test]
+    fn serializes_active_process_policy_using_documented_values() {
+        let defer = toml::to_string(&ReexecConfig::default()).expect("config should serialize");
+        assert_eq!(defer, "active_processes = \"defer\"\n");
+
+        let restart = toml::to_string(&ReexecConfig {
+            active_processes: ActiveProcessPolicy::Restart,
+        })
+        .expect("config should serialize");
+        assert_eq!(restart, "active_processes = \"restart\"\n");
     }
 
     #[test]

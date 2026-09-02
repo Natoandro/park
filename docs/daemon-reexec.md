@@ -462,7 +462,7 @@ fixed by the design above; these are execution tasks, not open design choices.
   status`, `park daemon reexec`, and `park daemon config`.
 - [x] [REXEC-M0-04] Add built-in configuration defaults and load the optional
   `$XDG_CONFIG_HOME/park/config.toml` file with its documented fallback.
-- [ ] [REXEC-M0-05] Implement `daemon.reexec.active_processes` with `defer` as
+- [x] [REXEC-M0-05] Implement `daemon.reexec.active_processes` with `defer` as
   the default and `restart` as the opt-in value.
 - [ ] [REXEC-M0-06] Implement the managed-process restart policy and bounded
   backoff configuration with `never` as the default.
