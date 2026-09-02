@@ -62,8 +62,10 @@ baseline is the invocation directory; Git-root discovery is not implicit.
 The CLI communicates with one daemon per user through a local Unix socket. The
 protocol is versioned, newline-delimited JSON. Requests and responses contain
 request IDs, an operation, a target process key where applicable, and a
-structured result. The client verifies the protocol version and request ID
-before rendering a response.
+structured result. Requests also carry the client compatibility identity. The
+internal `reexec` operation carries a candidate executable path and version;
+safe handoff is not implemented yet. The client verifies the protocol version
+and request ID before rendering a response.
 
 If the socket is missing or refused, a CLI invocation may start a detached
 daemon candidate and retry the connection. An advisory lock determines the

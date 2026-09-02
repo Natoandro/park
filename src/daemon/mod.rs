@@ -320,7 +320,10 @@ fn operation_name(operation: &IpcOperation) -> Option<&OsStr> {
         | IpcOperation::Restart { key }
         | IpcOperation::Start { key }
         | IpcOperation::Remove { key, .. } => Some(key.name()),
-        IpcOperation::Ping | IpcOperation::Ps { .. } | IpcOperation::Clean => None,
+        IpcOperation::Ping
+        | IpcOperation::Reexec { .. }
+        | IpcOperation::Ps { .. }
+        | IpcOperation::Clean => None,
     }
 }
 
@@ -404,6 +407,13 @@ fn canonicalize_operation(
             keep_logs,
         }),
         IpcOperation::Ping => Ok(IpcOperation::Ping),
+        IpcOperation::Reexec {
+            candidate_path,
+            candidate_version,
+        } => Ok(IpcOperation::Reexec {
+            candidate_path,
+            candidate_version,
+        }),
         IpcOperation::Clean => Ok(IpcOperation::Clean),
     }
 }
@@ -433,6 +443,11 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
 
     match request.operation {
         IpcOperation::Ping => IpcResponse::success(request.request_id, None),
+        IpcOperation::Reexec { .. } => IpcResponse::error(
+            request.request_id,
+            ResultStatus::Failure,
+            "reexec requests are not implemented",
+        ),
         IpcOperation::Launch { .. } => IpcResponse::error(
             request.request_id,
             ResultStatus::Failure,

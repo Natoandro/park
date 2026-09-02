@@ -1,7 +1,8 @@
 # Internal Design: Daemon Re-exec
 
-Status: design only. This document describes a future upgrade mechanism; it is
-not an implemented command or protocol contract.
+Status: design with the Milestone 0 protocol primitives implemented. This
+document describes the future upgrade mechanism; re-exec execution is not yet
+implemented.
 
 Compatibility assumption: this design only targets Park daemons that support
 the re-exec operation. Compatibility with daemons from releases that predate
@@ -455,7 +456,7 @@ fixed by the design above; these are execution tasks, not open design choices.
 
 - [x] [REXEC-M0-01] Add the client compatibility identity to every IPC request
   and validate it in the daemon before dispatch.
-- [ ] [REXEC-M0-02] Add the internal `reexec` IPC operation with candidate
+- [x] [REXEC-M0-02] Add the internal `reexec` IPC operation with candidate
   executable path and version fields.
 - [ ] [REXEC-M0-03] Add public daemon-management parsing for `park daemon
   status`, `park daemon reexec`, and `park daemon config`.

@@ -76,6 +76,38 @@ fn rejects_mismatched_client_versions() {
 }
 
 #[test]
+fn recognizes_reexec_as_an_internal_operation() {
+    let root = std::env::temp_dir().join(format!("park-reexec-operation-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let paths = StoragePaths::from_environment(&crate::storage::XdgEnvironment {
+        state_home: Some(root.join("state")),
+        runtime_dir: Some(root.join("runtime")),
+        home: None,
+    })
+    .expect("paths should resolve");
+    paths
+        .ensure_directories()
+        .expect("storage should initialize");
+    let storage = Storage::new(paths);
+    let response = handle_request(
+        &storage,
+        IpcRequest::new(
+            4,
+            IpcOperation::Reexec {
+                candidate_path: "/usr/local/bin/park".into(),
+                candidate_version: "0.3.0".to_owned(),
+            },
+        ),
+    );
+    assert_eq!(response.result.status, ResultStatus::Failure);
+    assert_eq!(
+        response.result.human_message(),
+        "reexec requests are not implemented"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn ps_and_status_return_persisted_records() {
     let root = std::env::temp_dir().join(format!("park-phase4-handler-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);

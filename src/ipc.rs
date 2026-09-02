@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -30,6 +30,10 @@ pub struct IpcRequest {
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum IpcOperation {
     Ping,
+    Reexec {
+        candidate_path: PathBuf,
+        candidate_version: String,
+    },
     Launch {
         project_path: ProjectPath,
         #[serde(with = "crate::os_string")]
@@ -302,6 +306,20 @@ pub fn request_for_ps(request_id: u64, project_path: ProjectPath) -> IpcRequest 
     IpcRequest::new(request_id, IpcOperation::Ps { project_path })
 }
 
+pub fn request_for_reexec(
+    request_id: u64,
+    candidate_path: PathBuf,
+    candidate_version: String,
+) -> IpcRequest {
+    IpcRequest::new(
+        request_id,
+        IpcOperation::Reexec {
+            candidate_path,
+            candidate_version,
+        },
+    )
+}
+
 pub fn request_for_launch(
     request_id: u64,
     project_path: ProjectPath,
@@ -427,6 +445,25 @@ mod tests {
             serde_json::to_string(&response).expect("response should serialize"),
             r#"{"version":1,"request_id":3,"result":{"status":"missing_record","ok":false,"error":{"code":"missing_record","message":"not found"}}}"#
         );
+    }
+
+    #[test]
+    fn serializes_reexec_request_fields() {
+        let request =
+            request_for_reexec(6, PathBuf::from("/usr/local/bin/park"), "0.3.0".to_owned());
+        assert_eq!(
+            serde_json::to_string(&request).expect("request should serialize"),
+            format!(
+                r#"{{"version":1,"request_id":6,"client_version":"{}","operation":"reexec","candidate_path":"/usr/local/bin/park","candidate_version":"0.3.0"}}"#,
+                CLIENT_VERSION
+            )
+        );
+
+        let decoded: IpcRequest = serde_json::from_str(
+            &serde_json::to_string(&request).expect("request should serialize"),
+        )
+        .expect("request should deserialize");
+        assert_eq!(decoded, request);
     }
 
     #[test]
