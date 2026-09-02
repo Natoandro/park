@@ -1,6 +1,28 @@
 # Park
 
-Park is a project-scoped background process manager for local development. It runs a named command independently of the terminal that launched it, then keeps its status and output available for later inspection and control.
+**Keep local development processes running, visible, and under control.**
+
+Park runs a named command independently of the terminal that launched it, then
+keeps its status and output available for later inspection and control. Start a
+server, close the terminal, and come back to the same process from the same
+project later.
+
+[Install Park](#installation) · [Try the quick start](#quick-start) · [Read the docs](docs/src/introduction.md)
+
+Park is a small, ordinary CLI for developers who need a better alternative to
+leaving terminals open, using `nohup`, or rebuilding a process by hand. Coding-
+agent integration is available when useful, but is not part of the core setup.
+
+## Why Park?
+
+- **Leave the terminal behind:** local servers, workers, and watchers keep running after the launching shell closes.
+- **Keep names scoped to projects:** `dev` in one project is independent from `dev` in another.
+- **Return to the evidence:** status and separate stdout/stderr logs remain available after a process exits.
+- **Control the whole process tree:** stop and restart commands target the managed process group where the platform supports it.
+- **Automate safely:** stable JSON output, wait conditions, and lifecycle exit codes work in scripts and tooling.
+
+Park is a development-machine tool, not a production supervisor, container runtime,
+or deployment system.
 
 The Rust package is `park-cli`; the installed executable is `park`.
 
@@ -18,6 +40,9 @@ cargo install park-cli
 
 This installs the `park` executable from the `park-cli` package.
 
+Park currently supports Unix systems. Linux has the strongest process-ownership
+and recovery guarantees; Windows is not yet supported.
+
 To try the latest development version from the `master` branch:
 
 ```bash
@@ -26,6 +51,36 @@ cargo install --git https://github.com/Natoandro/park.git --branch master park-c
 
 The `master` build may be unstable and can differ from the latest published
 release. For a local checkout, use `cargo install --path .` instead.
+
+## Everyday Development
+
+Use Park anywhere you would otherwise keep a terminal tab open for a long-running
+local command:
+
+```bash
+# From the project directory
+park api -- ./bin/api --port 3000
+park worker -- cargo run --bin worker
+
+# Close the terminal, then return later
+park ps
+park status api
+park logs api --tail 100
+park restart api
+park stop api
+```
+
+This is especially useful for:
+
+- Development servers and API backends you revisit throughout the day.
+- Background workers, queues, and local consumers that should survive shell changes.
+- File watchers and documentation preview servers.
+- Temporary local services whose output you need to inspect after failure.
+- Shell scripts that need to wait for a process to become ready before continuing.
+
+Park does not require a manifest or project configuration for this workflow. The
+name is associated with the directory where you run the command, so the same
+short names can be reused across projects.
 
 ## AI Agent Integration
 

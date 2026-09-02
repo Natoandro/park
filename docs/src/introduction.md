@@ -1,15 +1,73 @@
-# Introduction
+# Park
+
+**Keep local development processes running, visible, and under control.**
 
 Park is a project-scoped background process manager for local development. It
 runs a named command independently of the terminal that launched it, then
 keeps the command's status and output available for later inspection and
-control.
+control. Start a server, close the terminal, and return to the same process from
+the same project later.
 
-Park is designed for development machines and ad-hoc commands. It is not a
-production service manager, container runtime, deployment system, task graph,
-or general workflow engine. Managed commands run as ordinary host processes and
-share the host filesystem, network, and other operating-system resources. Use a
-container or virtual machine when isolation is required.
+```bash
+cargo install park-cli
+```
+
+[Quick start](quick-start.md) · [Installation](installation.md) · [Commands](commands/index.md)
+
+Park is a small CLI for developers who need a better alternative to leaving
+terminals open, using `nohup`, or rebuilding a process by hand. Coding-agent
+integration is available when useful, but is not part of the core setup.
+
+## Why Park?
+
+- **Terminal-independent:** local servers, workers, and watchers keep running after the launching shell closes.
+- **Project-scoped:** the name `dev` in one project is independent from `dev` in another.
+- **Inspectable:** status and separate stdout/stderr logs remain available after exit.
+- **Safe to control:** lifecycle operations target the managed process group where supported.
+- **Scriptable:** JSON output, wait conditions, and stable exit codes support automation.
+
+Park is for development machines. It is not a production service manager,
+container runtime, deployment system, task graph, or general workflow engine.
+
+## A Normal Developer Workflow
+
+```bash
+# From the project directory
+park api -- ./bin/api --port 3000
+park worker -- cargo run --bin worker
+
+# Close the terminal, then return later
+park ps
+park status api
+park logs api --tail 100
+park restart api
+park stop api
+```
+
+Use Park for development servers, local workers, file watchers, preview servers,
+temporary services, and scripts that need to wait for readiness. No project
+manifest is required for this workflow.
+
+## With Coding Agents
+
+Park also gives developers and coding agents a shared process vocabulary. An
+agent can inspect an existing record before launching a duplicate, wait for a
+readiness message, read retained logs, and avoid stopping a process owned by
+someone else. The [AI Agent Integration](ai-agents.md) guide covers the optional
+skill installation; the `park` CLI remains the operational interface.
+
+## At A Glance
+
+| Need | Park provides |
+| --- | --- |
+| Keep a local command alive after closing a shell | Detached, on-demand per-user daemon |
+| Find the process later | Project-scoped names and durable records |
+| Diagnose a failed command | Retained, separate stdout and stderr logs |
+| Wait before running the next step | State, exit, and literal log-match conditions |
+| Integrate with scripts | Stable JSON output and lifecycle exit codes |
+
+The remainder of this page explains the technical contract. Start with the
+[quick start](quick-start.md) if you want to try Park first.
 
 ## The Core Workflow
 

@@ -1,7 +1,8 @@
 # Summary
 
-- [Introduction](introduction.md)
+- [Home](introduction.md)
 - [Installation](installation.md)
+- [Everyday Development](everyday-development.md)
 - [AI Agent Integration](ai-agents.md)
 - [Quick Start](quick-start.md)
 - [Commands](commands/index.md)
