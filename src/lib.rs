@@ -18,8 +18,17 @@ pub use config::{
     ActiveProcessPolicy, Config, ConfigError, DaemonConfig, ManagedProcessesConfig, ReexecConfig,
     RestartBackoff, RestartConfig, RestartPolicy, config_path,
 };
+pub use daemon::descriptors::{
+    DescriptorEntry, DescriptorError, DescriptorRole, DescriptorTable, MAX_INHERITED_FD,
+    MIN_INHERITED_FD,
+};
+pub use daemon::handoff::{
+    HANDOFF_VERSION, HandoffError, HandoffManifest, MANIFEST_FILE_NAME, MAX_MANIFEST_BYTES,
+    manifest_path,
+};
 pub use daemon::{
-    DaemonError, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, run as run_daemon,
+    DaemonError, DaemonPhase, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT,
+    run as run_daemon,
 };
 pub use help::skills_help_result;
 pub use ipc::{

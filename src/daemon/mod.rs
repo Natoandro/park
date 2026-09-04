@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -22,6 +23,8 @@ use crate::result::ResultStatus;
 use crate::storage::{Storage, StorageError, StoragePaths};
 
 mod control;
+pub mod descriptors;
+pub mod handoff;
 mod launch;
 mod logs;
 mod monitor;
@@ -31,9 +34,34 @@ mod wait;
 pub const INTERNAL_DAEMON_ARGUMENT: &str = "--internal-daemon";
 pub const INTERNAL_SUPERVISOR_ARGUMENT: &str = "--internal-supervisor";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-const HANDOFF_VERSION: u16 = 0;
+use handoff::HANDOFF_VERSION;
 const DAEMON_GENERATION: u64 = 1;
 const REEXEC_STATE: &str = "serving";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DaemonPhase {
+    Serving,
+    Quiescing,
+    HandingOff,
+}
+
+impl DaemonPhase {
+    fn as_u8(self) -> u8 {
+        match self {
+            Self::Serving => 0,
+            Self::Quiescing => 1,
+            Self::HandingOff => 2,
+        }
+    }
+
+    fn from_u8(value: u8) -> Self {
+        match value {
+            1 => Self::Quiescing,
+            2 => Self::HandingOff,
+            _ => Self::Serving,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct DaemonLock {
@@ -101,11 +129,21 @@ impl Drop for DaemonLock {
 
 pub(super) struct DaemonState {
     pub(super) storage: Storage,
+    phase: AtomicU8,
     active_launches: Mutex<std::collections::HashSet<ProcessKey>>,
     lifecycle_locks: Mutex<std::collections::HashMap<ProcessKey, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 impl DaemonState {
+    pub(super) fn phase(&self) -> DaemonPhase {
+        DaemonPhase::from_u8(self.phase.load(Ordering::Acquire))
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn set_phase(&self, phase: DaemonPhase) {
+        self.phase.store(phase.as_u8(), Ordering::Release);
+    }
+
     pub(super) fn reserve_launch(&self, key: ProcessKey) -> Option<LaunchReservation<'_>> {
         let mut active = self
             .active_launches
@@ -158,6 +196,7 @@ pub async fn run(paths: StoragePaths) -> Result<bool, DaemonError> {
     storage.reconcile(now, record_is_alive)?;
     let state = Arc::new(DaemonState {
         storage,
+        phase: AtomicU8::new(DaemonPhase::Serving.as_u8()),
         active_launches: Mutex::new(std::collections::HashSet::new()),
         lifecycle_locks: Mutex::new(std::collections::HashMap::new()),
     });
@@ -237,6 +276,15 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
         ));
     }
 
+    if state.phase() != DaemonPhase::Serving
+        && operation_is_blocked_during_quiesce(&request.operation)
+    {
+        return DispatchResponse::Single(IpcResponse::daemon_restarting(
+            request.request_id,
+            DAEMON_GENERATION,
+        ));
+    }
+
     let request_id = request.request_id;
     let operation = match canonicalize_operation(request.operation) {
         Ok(operation) => operation,
@@ -311,6 +359,13 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
         }
         operation => handle_request(&state.storage, IpcRequest::new(request_id, operation)).into(),
     }
+}
+
+fn operation_is_blocked_during_quiesce(operation: &IpcOperation) -> bool {
+    !matches!(
+        operation,
+        IpcOperation::Ping | IpcOperation::DaemonStatus | IpcOperation::DaemonConfig
+    )
 }
 
 fn operation_name(operation: &IpcOperation) -> Option<&OsStr> {

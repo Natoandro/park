@@ -131,6 +131,23 @@ impl IpcResponse {
             result: CommandResult::error(status, message),
         }
     }
+
+    pub fn daemon_restarting(request_id: u64, generation: u64) -> Self {
+        Self {
+            version: PROTOCOL_VERSION,
+            request_id,
+            result: CommandResult {
+                status: ResultStatus::DaemonRestarting,
+                ok: false,
+                message: None,
+                data: Some(serde_json::json!({ "generation": generation, "retryable": true })),
+                error: Some(crate::result::ResultError {
+                    code: ResultStatus::DaemonRestarting,
+                    message: "daemon is restarting; retry the request".to_owned(),
+                }),
+            },
+        }
+    }
 }
 
 pub async fn send_request(
@@ -476,6 +493,16 @@ mod tests {
             serde_json::to_string(&response).expect("response should serialize"),
             r#"{"version":1,"request_id":3,"result":{"status":"missing_record","ok":false,"error":{"code":"missing_record","message":"not found"}}}"#
         );
+    }
+
+    #[test]
+    fn serializes_retryable_daemon_restarting_response() {
+        let response = IpcResponse::daemon_restarting(12, 7);
+        assert_eq!(response.result.status, ResultStatus::DaemonRestarting);
+        assert!(!response.result.ok);
+        let data = response.result.data.as_ref().expect("restart data");
+        assert_eq!(data["retryable"], true);
+        assert_eq!(data["generation"], 7);
     }
 
     #[test]

@@ -96,6 +96,10 @@ impl StoragePaths {
         self.runtime_dir.join("daemon.pid")
     }
 
+    pub fn handoff_path(&self) -> PathBuf {
+        self.runtime_dir.join("daemon.handoff.json")
+    }
+
     pub fn database_path(&self) -> &Path {
         &self.database_path
     }

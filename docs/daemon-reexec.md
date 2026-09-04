@@ -1,8 +1,8 @@
 # Internal Design: Daemon Re-exec
 
-Status: design with the Milestone 0 protocol primitives implemented. This
-document describes the future upgrade mechanism; re-exec execution is not yet
-implemented.
+Status: design with the Milestone 0 protocol and handoff primitives implemented.
+This document describes the future upgrade mechanism; re-exec execution is not
+yet implemented.
 
 Compatibility assumption: this design only targets Park daemons that support
 the re-exec operation. Compatibility with daemons from releases that predate
@@ -470,11 +470,11 @@ fixed by the design above; these are execution tasks, not open design choices.
   backoff configuration with `never` as the default.
 - [x] [REXEC-M0-07] Implement `park daemon status` and `park daemon config`
   output, including JSON output for scripts.
-- [ ] [REXEC-M0-08] Add the retryable daemon-restarting response used while
+- [x] [REXEC-M0-08] Add the retryable daemon-restarting response used while
   requests are quiesced.
-- [ ] [REXEC-M0-09] Add a versioned private handoff manifest under the runtime
+- [x] [REXEC-M0-09] Add a versioned private handoff manifest under the runtime
   directory with bounded size, private permissions, generation, and expiry.
-- [ ] [REXEC-M0-10] Add the inherited descriptor table with fixed descriptor
+- [x] [REXEC-M0-10] Add the inherited descriptor table with fixed descriptor
   roles and strict `FD_CLOEXEC` handling.
 - [ ] [REXEC-M0-11] Add daemon generations and per-record launch generations
   to reject stale monitor updates.

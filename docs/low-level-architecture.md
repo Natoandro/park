@@ -23,6 +23,15 @@ The CLI connects through a per-user local Unix socket in `$XDG_RUNTIME_DIR/park`
 
 Use versioned, newline-delimited JSON request/response messages with an operation, request ID, target process key, and structured result. Every request carries the client compatibility identity. The internal `reexec` operation also carries a candidate executable path and candidate version; it is a protocol primitive until the safe handoff implementation is complete. The client verifies both response protocol version and request ID before rendering it. On connection failure, it starts a daemon only for a missing or refused socket; permission and protocol failures are returned directly. Every response needs a machine-readable status so the CLI can render JSON without parsing human text. Streaming log follow is a long-lived IPC operation that forwards appended records and ends with the observed exit result when the process terminates.
 
+During a re-exec barrier, non-inspection requests receive the structured
+`daemon_restarting` status with a retryable marker and daemon generation.
+Handoff state is kept separately under the private runtime directory in a
+versioned, atomically replaced manifest. The manifest is bounded to 64 KiB,
+owner-readable only, expires at a supplied epoch time, and references only the
+validated inherited descriptor table. Descriptor entries use fixed listener,
+lock, stdout, and stderr roles, reject duplicate or out-of-range descriptors,
+and explicitly control `FD_CLOEXEC` rather than inheriting arbitrary descriptors.
+
 Global configuration is read from `$XDG_CONFIG_HOME/park/config.toml`, or
 `$HOME/.config/park/config.toml` when the XDG variable is absent. A missing file
 uses built-in defaults; a present file must be readable and valid TOML.

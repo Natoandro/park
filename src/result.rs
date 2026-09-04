@@ -9,6 +9,7 @@ pub enum ResultStatus {
     MissingRecord,
     DuplicateRecord,
     InvalidState,
+    DaemonRestarting,
 }
 
 impl ResultStatus {
@@ -19,6 +20,7 @@ impl ResultStatus {
             Self::MissingRecord => 3,
             Self::DuplicateRecord => 4,
             Self::InvalidState => 5,
+            Self::DaemonRestarting => 1,
         }
     }
 
