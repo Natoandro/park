@@ -111,6 +111,27 @@ fn recognizes_reexec_as_an_internal_operation() {
 }
 
 #[test]
+fn blocks_mutating_and_streaming_operations_during_quiescing() {
+    assert!(operation_is_blocked_during_quiesce(&IpcOperation::Clean));
+    assert!(operation_is_blocked_during_quiesce(&IpcOperation::Logs {
+        key: crate::process::ProcessKey::new(
+            ProjectPath::from_canonical("/project".into()),
+            OsString::from("dev"),
+        ),
+        tail: None,
+        head: None,
+        follow: true,
+        grep: None,
+        stdout: false,
+        stderr: false,
+    }));
+    assert!(!operation_is_blocked_during_quiesce(&IpcOperation::Ping));
+    assert!(!operation_is_blocked_during_quiesce(
+        &IpcOperation::DaemonStatus
+    ));
+}
+
+#[test]
 fn ps_and_status_return_persisted_records() {
     let root = std::env::temp_dir().join(format!("park-phase4-handler-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);

@@ -172,6 +172,8 @@ pub enum DescriptorError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::fd::AsRawFd;
 
     #[test]
     fn rejects_duplicate_fds_and_roles() {
@@ -222,5 +224,25 @@ mod tests {
             table.validate(),
             Err(DescriptorError::InvalidFd(2))
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn toggles_and_verifies_cloexec_only_for_listed_descriptors() {
+        let file = std::fs::File::open("/dev/null").expect("descriptor should open");
+        let table = DescriptorTable {
+            entries: vec![DescriptorEntry {
+                fd: file.as_raw_fd(),
+                role: DescriptorRole::Listener,
+            }],
+        };
+        table
+            .set_inheritable()
+            .expect("descriptor should be inheritable");
+        table
+            .ensure_inheritable()
+            .expect("inheritable state should verify");
+        table.set_cloexec().expect("descriptor should be cloexec");
+        table.ensure_cloexec().expect("cloexec state should verify");
     }
 }
