@@ -267,6 +267,34 @@ mod tests {
     }
 
     #[test]
+    fn rejects_oversized_and_non_private_manifest_files() {
+        let root =
+            std::env::temp_dir().join(format!("park-handoff-invalid-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("test directory should be created");
+        let path = manifest_path(&root);
+        fs::write(&path, vec![b'x'; MAX_MANIFEST_BYTES + 1]).expect("oversized file should write");
+        assert!(matches!(
+            HandoffManifest::read(&path, 1),
+            Err(HandoffError::Io { .. }) | Err(HandoffError::TooLarge(_))
+        ));
+        let _ = fs::remove_file(&path);
+        manifest()
+            .write_atomic(&path)
+            .expect("manifest should write");
+        #[cfg(unix)]
+        {
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644))
+                .expect("permissions should change");
+            assert!(matches!(
+                HandoffManifest::read(&path, 1),
+                Err(HandoffError::Io { .. })
+            ));
+        }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn manifest_path_is_under_runtime_directory() {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock");
         assert!(manifest_path(Path::new("/run/user/1000/park")).ends_with(MANIFEST_FILE_NAME));
