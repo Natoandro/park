@@ -36,9 +36,10 @@ package_version() {
 
 current_version=$(package_version park-cli)
 macro_version=$(package_version park-e2e-macros)
-if [ "$current_version" != "$macro_version" ]; then
-    printf 'version mismatch: park-cli=%s, park-e2e-macros=%s\n' \
-        "$current_version" "$macro_version" >&2
+e2e_version=$(package_version park-e2e)
+if [ "$current_version" != "$macro_version" ] || [ "$current_version" != "$e2e_version" ]; then
+    printf 'version mismatch: park-cli=%s, park-e2e-macros=%s, park-e2e=%s\n' \
+        "$current_version" "$macro_version" "$e2e_version" >&2
     exit 1
 fi
 
@@ -143,10 +144,11 @@ update_development_version() {
 }
 
 update_manifest Cargo.toml
+update_manifest e2e/Cargo.toml
 update_manifest e2e-macros/Cargo.toml
 
 update_macro_dependency_version() {
-    manifest=Cargo.toml
+    manifest=e2e/Cargo.toml
     temporary="$manifest.tmp.$$"
     awk -v new_version="$new_version" '
         /^[[:space:]]*park-e2e-macros[[:space:]]*=[[:space:]]*\{[^}]*version[[:space:]]*=/ && !version_updated {

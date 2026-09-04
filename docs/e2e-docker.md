@@ -1,9 +1,12 @@
 # Docker E2E Tests
 
 Park's end-to-end scenarios run as an independent Rust binary in a Linux Docker
-container. The container build stage provides Rust and Cargo to compile the
-application and runner. The final runtime stage contains only the selected
-`park` artifact, the `park-e2e` runner, and their operating-system runtime.
+container. The `park-e2e` runner is a separate unpublished workspace package, so
+it remains a real binary for the test image without being installed by
+`cargo install` or `cargo binstall` for `park-cli`. The container build stage
+provides Rust and Cargo to compile the application and runner. The final runtime
+stage contains only the selected `park` artifact, the `park-e2e` runner, and
+their operating-system runtime.
 
 The `PARK-CLI-*` and `PARK-LAUNCH-*` scenarios in
 `src/bin/park-e2e/scenarios/` cover the foundation CLI and launch stories. The
@@ -22,9 +25,10 @@ than this black-box runner: `PARK-DAEMON-002`, `PARK-DAEMON-003`,
 - `docker/e2e/Dockerfile` defines the Linux Rust test image.
 - `docker/e2e/entrypoint.sh` validates the runner root and executes the
   prebuilt Rust runner.
+- `e2e/Cargo.toml` defines the unpublished `park-e2e` workspace package.
 - `e2e-macros` provides the local `#[e2e(...)]` scenario metadata macro.
-- `build.rs` discovers scenario modules and generates their module declarations
-  and sorted registry at build time.
+- `e2e/build.rs` discovers scenario modules and generates their module
+  declarations and sorted registry at build time.
 - `src/bin/park-e2e/scenarios/` contains one `.rs` file per scenario.
 - `.dockerignore` keeps Git metadata and local build output out of the image
   context.
@@ -211,8 +215,8 @@ without builder-level locking.
 ## Test Design Rules
 
 - Map every test to a `PARK-*` story in `docs/e2e-user-stories.md`.
-- Add one scenario file under `src/bin/park-e2e/scenarios/`; `build.rs` discovers
-  it automatically.
+- Add one scenario file under `src/bin/park-e2e/scenarios/`; `e2e/build.rs`
+  discovers it automatically.
 - Use a fresh XDG state/runtime root per test or test fixture.
 - Invoke the binary selected by `PARK_BIN`; do not depend on a host-installed
   binary or `CARGO_BIN_EXE_park`.

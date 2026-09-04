@@ -5,13 +5,15 @@ ARG BUILD_PROFILE
 
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
+COPY e2e ./e2e
 COPY e2e-macros ./e2e-macros
-COPY build.rs ./build.rs
 COPY src ./src
 RUN if [ "$BUILD_PROFILE" = "release" ]; then \
-        cargo build --release --bin park --bin park-e2e; \
+        cargo build --release --package park-cli --bin park \
+        && cargo build --release --package park-e2e --bin park-e2e; \
     elif [ "$BUILD_PROFILE" = "debug" ]; then \
-        cargo build --bin park --bin park-e2e; \
+        cargo build --package park-cli --bin park \
+        && cargo build --package park-e2e --bin park-e2e; \
     else \
         printf 'unsupported BUILD_PROFILE: %s\n' "$BUILD_PROFILE" >&2; \
         exit 2; \

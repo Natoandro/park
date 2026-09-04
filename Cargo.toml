@@ -5,9 +5,11 @@ edition = "2024"
 description = "A project-scoped background process manager for local development"
 license = "Apache-2.0"
 repository = "https://github.com/Natoandro/park"
+exclude = ["src/bin/park-e2e/"]
+autobins = false
 
 [workspace]
-members = ["e2e-macros"]
+members = ["e2e", "e2e-macros"]
 resolver = "3"
 
 [lib]
@@ -19,8 +21,6 @@ name = "park"
 path = "src/main.rs"
 
 [dependencies]
-# Local-only metadata macro for the standalone, black-box e2e runner.
-park-e2e-macros = { path = "e2e-macros", version = "0.2.0" }
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

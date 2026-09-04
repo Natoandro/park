@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest path"));
-    let scenarios_dir = manifest_dir.join("src/bin/park-e2e/scenarios");
+    let scenarios_dir = manifest_dir
+        .parent()
+        .expect("e2e package parent directory")
+        .join("src/bin/park-e2e/scenarios");
     println!("cargo:rerun-if-changed={}", scenarios_dir.display());
 
     let mut modules = fs::read_dir(&scenarios_dir)

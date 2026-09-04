@@ -1,8 +1,8 @@
 use std::env;
 
-#[path = "park-e2e/scenarios/mod.rs"]
+#[path = "../../src/bin/park-e2e/scenarios/mod.rs"]
 mod scenarios;
-#[path = "park-e2e/support.rs"]
+#[path = "../../src/bin/park-e2e/support.rs"]
 mod support;
 
 pub struct Scenario {

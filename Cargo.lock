@@ -282,13 +282,21 @@ version = "0.2.1"
 dependencies = [
  "clap",
  "nix",
- "park-e2e-macros",
  "rusqlite",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
  "toml",
+]
+
+[[package]]
+name = "park-e2e"
+version = "0.2.1"
+dependencies = [
+ "nix",
+ "park-e2e-macros",
+ "serde_json",
 ]
 
 [[package]]

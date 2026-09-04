@@ -21,6 +21,7 @@ package_version() {
 
 root_version=$(package_version park-cli)
 macro_version=$(package_version park-e2e-macros)
+e2e_version=$(package_version park-e2e)
 documented_version=$(awk '
     /current package version is `[0-9]+\.[0-9]+\.[0-9]+`/ {
         if (match($0, /[0-9]+\.[0-9]+\.[0-9]+/)) {
@@ -39,9 +40,9 @@ documented_version=$(awk '
     exit 1
 }
 
-if [ "$root_version" != "$macro_version" ]; then
-    printf 'version mismatch: park-cli=%s, park-e2e-macros=%s\n' \
-        "$root_version" "$macro_version" >&2
+if [ "$root_version" != "$macro_version" ] || [ "$root_version" != "$e2e_version" ]; then
+    printf 'version mismatch: park-cli=%s, park-e2e-macros=%s, park-e2e=%s\n' \
+        "$root_version" "$macro_version" "$e2e_version" >&2
     exit 1
 fi
 

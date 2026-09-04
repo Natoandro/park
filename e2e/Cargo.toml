@@ -1,0 +1,17 @@
+[package]
+name = "park-e2e"
+version = "0.2.1"
+edition = "2024"
+description = "Black-box end-to-end runner for Park"
+license = "Apache-2.0"
+repository = "https://github.com/Natoandro/park"
+publish = false
+
+[[bin]]
+name = "park-e2e"
+path = "src/main.rs"
+
+[dependencies]
+park-e2e-macros = { path = "../e2e-macros", version = "0.2.0" }
+serde_json = "1"
+nix = { version = "0.30", features = ["fs", "process", "signal"] }
