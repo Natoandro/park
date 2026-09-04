@@ -6,11 +6,13 @@ to associate with the process.
 
 ## Start Commands
 
-The primary launch form is `park <name> -- <command> [arguments...]`:
+The primary launch form is `park <name> [--env-file <path>]... -- <command>
+[arguments...]`:
 
 ```bash
 park dev -- pnpm dev
 park worker -- cargo run --bin worker
+park api --env-file .env --env-file .env.local -- ./bin/api --port 3000
 ```
 
 The `--` separator marks the beginning of the managed command and its
@@ -70,6 +72,9 @@ park stop dev
 park stop dev --force
 park restart dev
 park start dev
+park start docs -- mdbook serve docs
+park env dev
+park env dev --set LOG_LEVEL=debug
 park signal dev TERM
 park rm dev
 park rm dev --keep-logs
@@ -82,10 +87,20 @@ process-group behavior is intended to avoid orphaned children from wrappers
 such as `npm`, `pnpm`, and `cargo watch` where supported.
 
 `restart` stops an active process when necessary and starts it again from the
-recorded command. `start` is limited to retained terminal records. `rm` refuses
-active records and removes their logs unless `--keep-logs` is supplied. `clean`
-removes eligible terminal records and their logs across the user's Park state;
-it never removes active records.
+recorded command. It rereads recorded dotenv files; `--recapture-env` also
+captures the calling client's current environment and enables `--env-file`
+arguments. Supplied files replace the stored dotenv list; omitted files retain
+it. `start` with no command
+starts a retained terminal record. `start <name> -- <command>...` creates a new
+record when that project/name key is unused. `rm` refuses active records and
+removes their logs unless `--keep-logs` is supplied. `clean` removes eligible
+terminal records and their logs across the user's Park state; it never removes
+active records.
+
+The client captures its complete environment when a record is created. The
+daemon loads each `--env-file` on every spawn, and `park env` can add explicit
+per-record values or removals. The merged environment is not persisted, so
+dotenv changes affect later starts and restarts.
 
 ## Wait For A Condition
 

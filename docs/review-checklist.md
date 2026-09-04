@@ -10,11 +10,13 @@ Use this checklist for recurring reviews of Park changes. Reviewers should focus
 - [ ] Public commands, aliases, JSON fields, and exit codes are either implemented or clearly documented as not yet implemented.
 - [ ] Human output remains non-interactive and script-friendly.
 - [ ] JSON output does not expose undocumented persistence internals as a stable API accidentally.
+- [ ] Environment values are exposed only through the intentional `park env` command, not ordinary status or listing output.
 
 ## CLI And Project Resolution
 
 - [ ] Process names contain only ASCII letters, digits, `.`, `_`, `-`, and `:`; exact OS command arguments remain lossless, including non-UTF-8 Unix values where supported.
 - [ ] `--` command boundaries and dash-prefixed names are parsed without ambiguity regressions.
+- [ ] Repeatable `--env-file` options remain before the command separator and never cause the client to execute or parse dotenv files.
 - [ ] The CLI canonicalizes the invocation directory before creating lookup keys.
 - [ ] The daemon independently canonicalizes every project path received over IPC.
 - [ ] Relative, nonexistent, non-directory, and symlink-alias project paths have intentional, tested behavior.
@@ -39,12 +41,14 @@ Use this checklist for recurring reviews of Park changes. Reviewers should focus
 - [ ] PID, start-time, process-group, and session identity are verified before reconciliation or group signaling.
 - [ ] Persisted process identifiers are validated before conversion to platform PID types.
 - [ ] Lifecycle transitions cannot overwrite terminal states or make live processes removable.
+- [ ] Restart rereads dotenv files, recaptures only with `--recapture-env`, accepts `--env-file` only with that flag, and `start <name> -- <command>...` preserves duplicate-key protection.
 
 ## Output Capture And Monitoring
 
 - [ ] Stdout and stderr remain separate and are drained independently.
 - [ ] Capture failures terminate or otherwise safely contain the managed process group.
 - [ ] Wait, capture, and terminal-persistence failures are recorded as durable failures.
+- [ ] Environment-file read/parse failures are reported without spawning a child, and restart preflights them before stopping an active process.
 - [ ] Terminal record persistence is retried rather than silently discarded after transient storage errors.
 - [ ] Child output cannot deadlock because a log reader or IPC client is slow.
 - [ ] Exit codes and signal termination are persisted exactly once with intentional state semantics.
@@ -58,6 +62,7 @@ Use this checklist for recurring reviews of Park changes. Reviewers should focus
 - [ ] Stale temporary files and stale log-only artifacts have a safe recovery path.
 - [ ] Concurrent record mutations cannot allow stale state to replace a later terminal transition.
 - [ ] XDG state and runtime paths are used without hard-coded home-directory paths.
+- [ ] Stored environment inputs are private, validated, and distinct from the reevaluated merged environment.
 
 ## Tests And Verification
 

@@ -40,6 +40,14 @@ park web -- pnpm dev
 park wait web --match 'ready' --timeout 30s
 ```
 
+When a service needs project-local variables, let the daemon load them at
+launch time:
+
+```bash
+park web --env-file .env --env-file .env.local -- pnpm dev
+park env web
+```
+
 ### Workers And Local Services
 
 Run a queue worker, consumer, local database wrapper, or test service as a named

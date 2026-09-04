@@ -13,6 +13,7 @@ park CLI
 per-user Park daemon
   |-- process registry
   |-- process launcher and monitor
+  |-- environment resolution and dotenv loading
   |-- lifecycle and signal controller
   |-- stdout/stderr log writer
   `-- state and log storage
@@ -36,17 +37,22 @@ The registry persists process records in a private SQLite database and points to
 start request -> starting -> running -> stopping -> exited | failed | killed
 ```
 
-Starting records the exact executable arguments and working directory before returning success. A name collision in the same project is an error unless the user explicitly chooses replacement behavior. Restart uses the recorded command, not a shell reconstruction.
+Starting records the exact executable arguments, working directory, and
+environment inputs before returning success. A name collision in the same
+project is an error unless the user explicitly chooses replacement behavior.
+Restart uses the recorded command and environment inputs, not a shell
+reconstruction or the daemon's ambient environment.
 
 Stopping is graceful by default: send SIGTERM to the managed process group, wait two seconds, then escalate to SIGKILL when necessary. `--force` skips the grace period. Group signaling avoids orphaned children from wrappers such as `npm`, `pnpm`, and `cargo watch`.
 
 ## Public Behavior
 
-- The short start form is `park <name> -- <command> [arguments...]`; `run` may be an alias but is not required for normal use.
+- The short start form is `park <name> [--env-file <path>]... -- <command> [arguments...]`; `run` may be an alias but is not required for normal use.
+- `start <name> -- <command>...` creates a new record when the complete key is unused; `start <name>` relaunches a retained terminal record.
 - `ps`, `status`, and lifecycle commands resolve only within the current project's canonical path.
 - Logs stay available after a command exits. Standard output and standard error are retained independently and can also be presented together in deterministic stdout-then-stderr order.
 - `--json` is a first-class output mode for process inspection and should use documented, stable fields.
-- `restart` reuses the recorded command, `start` is limited to retained terminal records, and `rm`/`clean` never remove an active process or its remaining process group.
+- `restart` reuses the recorded command and environment inputs, with `--recapture-env` as the explicit opt-in for a new client snapshot. `park env` inspects or updates explicit per-record environment values. `rm`/`clean` never remove an active process or its remaining process group.
 - Commands must be non-interactive unless explicitly requested. Stable exit semantics distinguish normal failure, missing records, duplicate records, and invalid transitions.
 - `wait --state`, `wait --exit`, and literal `wait --match` are observation operations. They poll without taking a lifecycle lock, honor an optional duration timeout, and cancel when a streaming client disconnects.
 - IPC reads and writes are bounded by deadlines so a partial request or slow reader cannot stall daemon work or child-output capture.

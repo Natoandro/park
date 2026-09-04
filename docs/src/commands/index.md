@@ -6,7 +6,7 @@ the project directory whose process records you want to manage.
 The primary launch form is:
 
 ```text
-park <name> -- <command> [arguments...]
+park <name> [--env-file <path>]... -- <command> [arguments...]
 ```
 
 Use the command pages for the complete behavior of each operation:
@@ -14,6 +14,8 @@ Use the command pages for the complete behavior of each operation:
 - [Launch](launch.md) a named command and understand argument boundaries.
 - [Lifecycle](lifecycle.md) inspect, stop, restart, start, signal, remove, and
   clean records.
+- [Environment](environment.md) inspect and update per-record environment
+  inputs.
 - [Logs](logs.md) inspect, filter, and follow retained output.
 - [Scripting](scripting.md) use JSON output, exit codes, and wait conditions.
 - [Configuration](../configuration.md) describes optional user-scoped daemon and

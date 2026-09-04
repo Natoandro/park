@@ -4,7 +4,7 @@ Park is configuration-free by default. The normal launch workflow does not
 need a project manifest or a configuration file:
 
 ```bash
-park <name> -- <command> [arguments...]
+park <name> [--env-file <path>]... -- <command> [arguments...]
 ```
 
 Configuration is global to the current user. It is not project configuration,

@@ -367,6 +367,64 @@ identifiers should be checked for consistency, not fixed values.
 - **Acceptance criteria:** The managed group reaches a terminal state; the
   descendant is also terminated on supported Unix platforms; no orphan remains.
 
+### PARK-LAUNCH-009: Capture the launching client environment
+
+- **Scope:** Environment capture
+- **Priority:** P0
+- **Actor:** Developer
+- **Story:** As a developer, I want a parked command to receive the environment
+  from the shell that launched it, so that daemon state does not change its
+  behavior unexpectedly.
+- **Preconditions:** The fixture can print selected environment variables.
+- **Scenario:** Set a marker variable in the client environment, launch a
+  command that prints it, and inspect the retained output.
+- **Acceptance criteria:** The child receives the marker and the captured
+  environment is retained for later `start` and `restart` operations; unrelated
+  daemon environment changes do not replace it.
+
+### PARK-LAUNCH-010: Load ordered dotenv files in the daemon
+
+- **Scope:** Environment resolution
+- **Priority:** P0
+- **Actor:** Developer
+- **Story:** As a developer, I want project dotenv files layered onto the
+  launch environment, so that local service configuration does not require a
+  shell wrapper.
+- **Preconditions:** Two readable dotenv files contain overlapping variables;
+  the command prints selected values.
+- **Scenario:** Launch with repeated `--env-file` options in a known order.
+- **Acceptance criteria:** The daemon, rather than the client, reads the files;
+  later files override earlier files; captured client values override dotenv
+  values; explicit per-record overrides have the final precedence; shell syntax
+  is not executed.
+
+### PARK-LAUNCH-011: Reevaluate dotenv files on restart
+
+- **Scope:** Environment lifecycle
+- **Priority:** P0
+- **Actor:** Developer
+- **Story:** As a developer, I want dotenv edits to apply after a restart, so
+  that changing local configuration does not require recreating the record.
+- **Preconditions:** A retained record references a dotenv file and prints a
+  value from it.
+- **Scenario:** Change the dotenv value, restart the record, and inspect output.
+- **Acceptance criteria:** The restarted child receives the new value; the
+  merged environment is not treated as a frozen persisted snapshot.
+
+### PARK-LAUNCH-012: Create a record with the start subcommand
+
+- **Scope:** Start command
+- **Priority:** P1
+- **Actor:** Developer
+- **Story:** As a developer, I want an explicit `start` form for a new command,
+  so that scripts can use one lifecycle-oriented verb for initial startup.
+- **Preconditions:** The complete project/name key is unused.
+- **Scenario:** Run `park start <name> -- <command> [arguments...]`, optionally
+  with `--env-file`, then inspect status and output.
+- **Acceptance criteria:** A new record is created and started with the exact
+  command and captured environment. If the key already exists, the request
+  returns a duplicate result and does not replace the record.
+
 ## Inspection And Listing
 
 ### PARK-INSPECT-001: List records with `ps`
@@ -445,6 +503,20 @@ identifiers should be checked for consistency, not fixed values.
 - **Acceptance criteria:** Each applicable command exits `3`; human diagnostics
   go to stderr; JSON-capable commands report `status: "missing_record"` and
   `ok: false`; no record is created.
+
+### PARK-INSPECT-007: Inspect and update a record environment
+
+- **Scope:** Environment inspection
+- **Priority:** P1
+- **Actor:** Developer
+- **Story:** As a developer, I want to inspect and adjust a record's environment,
+  so that I can correct future launches without recreating the record.
+- **Preconditions:** A record exists and may reference dotenv files.
+- **Scenario:** Run `park env <name>`, update values with `--set` or `--unset`,
+  and start or restart the record.
+- **Acceptance criteria:** Inspection shows the currently resolved environment;
+  updates are durable explicit overrides; a running process is unchanged; the
+  next spawn uses the updates; JSON output is deterministic and stable.
 
 ## Logs
 
@@ -711,7 +783,7 @@ identifiers should be checked for consistency, not fixed values.
   run starts from the recorded command; only one active group exists; the
   latest run owns the record and appended logs.
 
-### PARK-LIFE-009: Start only a retained terminal record
+### PARK-LIFE-009: Start a retained terminal record
 
 - **Scope:** Start
 - **Priority:** P1
@@ -724,7 +796,39 @@ identifiers should be checked for consistency, not fixed values.
 - **Acceptance criteria:** Start succeeds for terminal records and appends
   output; start on an active record exits `5`; no duplicate process is created.
 
-### PARK-LIFE-010: Remove a terminal record and its logs
+### PARK-LIFE-010: Recapture the client environment explicitly
+
+- **Scope:** Restart environment
+- **Priority:** P1
+- **Actor:** Developer
+- **Story:** As a developer, I want to opt into recapturing my current shell
+  environment, so that ordinary restarts remain stable while intentional
+  environment changes are possible.
+- **Preconditions:** A terminal or running record exists and the client
+  environment differs from the stored capture.
+- **Scenario:** Restart without the flag, then restart with
+  `--recapture-env --env-file .env.next`, and inspect the child output for
+  marker variables.
+- **Acceptance criteria:** The ordinary restart uses the stored capture; the
+  flagged restart uses the calling client's capture and enables dotenv-file
+  arguments; both reread dotenv files; supplied files replace the stored dotenv
+  list, while omitting them retains it.
+
+### PARK-LIFE-011: Apply environment edits on the next spawn
+
+- **Scope:** Environment update
+- **Priority:** P1
+- **Actor:** Developer
+- **Story:** As a developer, I want to update a record's environment without
+  recreating it, so that later starts use the corrected values.
+- **Preconditions:** A record exists and a command can print selected variables.
+- **Scenario:** Run `park env <name> --set KEY=value --unset OTHER`, then
+  restart or start the record.
+- **Acceptance criteria:** The running child is unchanged; the next child sees
+  the explicit set and removal; the updates remain after the record exits; a
+  dotenv value cannot override an explicit removal.
+
+### PARK-LIFE-012: Remove a terminal record and its logs
 
 - **Scope:** Remove
 - **Priority:** P0
@@ -737,7 +841,7 @@ identifiers should be checked for consistency, not fixed values.
   record with exit `3`; metadata and both log files are gone; unrelated records
   and logs remain.
 
-### PARK-LIFE-011: Remove a record while keeping logs
+### PARK-LIFE-013: Remove a record while keeping logs
 
 - **Scope:** Remove retention option
 - **Priority:** P1
@@ -750,7 +854,7 @@ identifiers should be checked for consistency, not fixed values.
   remain; the command exits `0`; the retained files are not mistaken for an
   active process or a new record.
 
-### PARK-LIFE-012: Refuse removal of an active record
+### PARK-LIFE-014: Refuse removal of an active record
 
 - **Scope:** Removal safety
 - **Priority:** P0
@@ -762,7 +866,7 @@ identifiers should be checked for consistency, not fixed values.
 - **Acceptance criteria:** Remove exits `5`; the process and record remain
   active; logs remain; the user must stop the process before removal.
 
-### PARK-LIFE-013: Clean terminal records globally
+### PARK-LIFE-015: Clean terminal records globally
 
 - **Scope:** Cleanup
 - **Priority:** P1
@@ -777,7 +881,7 @@ identifiers should be checked for consistency, not fixed values.
   are removed; active records are retained; the result reports the number
   removed; unrelated state is unchanged.
 
-### PARK-LIFE-014: Serialize concurrent lifecycle mutations
+### PARK-LIFE-016: Serialize concurrent lifecycle mutations
 
 - **Scope:** Lifecycle concurrency
 - **Priority:** P0

@@ -16,6 +16,7 @@ park CLI
 per-user Park daemon
     |-- process registry and persistence
     |-- process launcher and monitor
+    |-- environment resolution and dotenv loading
     |-- lifecycle and signal controller
     |-- stdout/stderr capture
     `-- state and log storage
@@ -84,7 +85,10 @@ monitoring.
 The primary launch form is configuration-free and ad hoc:
 
 ```text
-park <name> -- <command> [arguments...]
+park <name> [--env-file <path>]... -- <command> [arguments...]
+park restart <name> --recapture-env [--env-file <path>]...
+park start <name> [--env-file <path>]... -- <command> [arguments...]
+park env <name> [--set KEY=VALUE]... [--unset KEY]...
 ```
 
 Daemon-management commands use an explicit namespace: `park daemon status`,
@@ -97,6 +101,12 @@ The command and argument vector are preserved exactly. Later `restart` and
 directory rather than reconstructing a shell command. Inspection and lifecycle
 operations are resolved within the current canonical project, and retained
 records remain available after exit.
+
+The launch client captures its complete environment and sends it to the daemon.
+The daemon, not the client, reads any requested dotenv files and resolves the
+effective environment immediately before each spawn. The captured snapshot,
+dotenv paths, and explicit `park env` edits are durable inputs; the merged
+environment is deliberately not persisted.
 
 Human output is non-interactive and script-friendly. JSON output and stable
 lifecycle exit codes are first-class behavior rather than formatting layered on

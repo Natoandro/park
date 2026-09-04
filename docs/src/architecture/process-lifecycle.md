@@ -19,12 +19,15 @@ For a launch request, the daemon:
 2. Rejects an existing record for that key, including a retained terminal
    record.
 3. Creates separate stdout and stderr log destinations.
-4. Persists the `starting` record with the exact executable, arguments, and
+4. Captures the client environment and records it with the ordered dotenv paths
+   and explicit environment edits.
+5. Persists the `starting` record with the exact executable, arguments, and
    working directory.
-5. Creates a dedicated process group or session where supported and spawns the
+6. Resolves the effective environment by rereading dotenv files and spawns the
    command without an implicit shell.
-6. Drains stdout and stderr independently while waiting for termination.
-7. Persists `running` only after spawn succeeds, then records the terminal
+7. Creates a dedicated process group or session where supported, then drains
+   stdout and stderr independently while waiting for termination.
+8. Persists `running` only after spawn succeeds, then records the terminal
    result exactly once.
 
 On Linux, Park starts a supervisor directly from the stored argument vector.
@@ -52,9 +55,20 @@ The supported names are `HUP`, `INT`, `QUIT`, `TERM`, `USR1`, `USR2`, `STOP`,
 not accepted.
 
 `restart` stops an active process when necessary, then launches the preserved
-executable, argument vector, and working directory. `start` is limited to a
-retained terminal record. Both operations reset the current lifecycle fields
-and append new output to the existing stream logs.
+executable, argument vector, working directory, and environment inputs. It
+rereads dotenv files for every spawn. `--recapture-env` replaces the stored
+client environment with the calling client's current environment before the
+restart and enables repeatable `--env-file` arguments. Supplied paths replace
+the stored dotenv file list; omitting them retains that list. `start` without a
+command is limited to a retained terminal record;
+`start <name> -- <command>...` creates a new record only when the complete key is
+unused. Both operations reset the current lifecycle fields and append new output
+to the existing stream logs.
+
+`park env` displays the effective environment and updates explicit per-record
+overrides or removals. It never mutates a running process. The daemon must
+evaluate the environment before stopping an active process for restart, so an
+unreadable or invalid dotenv file does not cause avoidable downtime.
 
 `rm` is distinct from `stop`: it refuses an active record or a record whose
 managed group is still present, then removes metadata and, unless

@@ -177,6 +177,8 @@ Park is intended for:
 - [ ] Filesystem-triggered restarts for development workflows.
 - [ ] Additional coordination support for shared human-and-agent workflows.
 - [ ] Optional project configuration with `park up` and `park down`.
+- [ ] Captured client environments, repeatable dotenv files, and per-record
+  environment inspection and updates.
 - [ ] Broader platform-specific process-ownership and lifecycle guarantees.
 - [ ] Log rotation, retention, and pruning.
 - [ ] Graceful daemon upgrades that preserve active managed processes.
@@ -220,17 +222,21 @@ release instructions.
 ## Intended Interface
 
 ```text
-park <name> -- <command> [arguments...]
+park <name> [--env-file <path>]... -- <command> [arguments...]
 park ps [--json]
 park status <name> [--json]
 park logs <name> [--tail N|--head N] [--follow] [--grep PATTERN] [--stdout|--stderr] [--json]
 park stop <name> [--force]
 park restart <name>
+park restart <name> --recapture-env [--env-file <path>]...
 park start <name>
+park start <name> [--env-file <path>]... -- <command> [arguments...]
 park signal <name> <SIGNAL>
 park rm <name> [--keep-logs]
 park clean
 park wait <name> (--state STATE | --match TEXT | --exit) [--timeout DURATION]
+park env <name> [--json]
+park env <name> [--set KEY=VALUE]... [--unset KEY]... [--json]
 park daemon status [--json]
 park daemon config [--json]
 park help --skills [--json]
@@ -238,11 +244,21 @@ park help --skills [--json]
 
 `park logs` is the canonical log interface. `park daemon status` and `park daemon config` inspect the per-user daemon without selecting a project. JSON output, stable exit codes, predictable lookup, and non-interactive operation are public requirements because Park is intended to work well in scripts and coding-agent workflows.
 
-`stop` sends SIGTERM to the managed process group and escalates to SIGKILL after a two-second grace period; `--force` sends SIGKILL immediately. `signal` accepts `HUP`, `INT`, `QUIT`, `TERM`, `USR1`, `USR2`, `STOP`, `CONT`, and `KILL`, with an optional `SIG` prefix. Numeric signal values are not accepted. `restart` stops an active process before starting it again from its recorded command, while `start` only starts a retained terminal record. Restart and start append to the existing stream logs.
+`stop` sends SIGTERM to the managed process group and escalates to SIGKILL after a two-second grace period; `--force` sends SIGKILL immediately. `signal` accepts `HUP`, `INT`, `QUIT`, `TERM`, `USR1`, `USR2`, `STOP`, `CONT`, and `KILL`, with an optional `SIG` prefix. Numeric signal values are not accepted. `restart` stops an active process before starting it again from its recorded command and environment inputs. `--recapture-env` captures the calling client's environment and enables repeatable `--env-file` arguments. `start` without a command starts a retained terminal record; `start <name> -- <command>...` creates a record when the key is unused. Restart and start append to the existing stream logs.
 
 `rm` refuses active records or records whose managed process group is still present, and removes logs unless `--keep-logs` is supplied. `clean` removes terminal records with no remaining managed process group across the user's Park state; it never removes active records.
 
 `wait --state` succeeds when the persisted state exactly matches the requested state. `wait --exit` matches any terminal state. `wait --match` performs a literal byte-substring search across both retained stdout and stderr, including output appended by later starts or restarts. Conditions are checked immediately and then polled; `--timeout` accepts `ms`, `s`, or `m` values, and a timeout is a generic failure (exit code `1`). A missing record remains exit code `3`.
+
+The client captures its complete environment when a record is created. `--env-file`
+can be repeated; the daemon reads those dotenv files in order for every spawn,
+and `park env` displays or updates explicit per-record values. The merged
+environment is not persisted. `restart` rereads the recorded files and accepts
+`--recapture-env` when the caller also wants to replace the stored client
+snapshot. The flag also enables repeatable `--env-file` arguments; supplied
+paths replace the stored dotenv file list, while omitting them retains the
+existing list. `start <name> -- <command>...` creates a new record when the key is
+unused; otherwise the existing record is not silently replaced.
 
 Without `--stdout` or `--stderr`, logs are combined deterministically as stdout followed by stderr. `--grep` performs a literal substring search on retained lines before `--head` or `--tail` is applied; regular expressions are not supported. With `--follow`, the initial retained output honors these filters and subsequent output is streamed as it is appended.
 

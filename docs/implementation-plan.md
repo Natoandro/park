@@ -43,6 +43,7 @@ Phase 1 syntax decisions:
 
 - The readable subcommand form is canonical; each operation also accepts a `--<operation>` alias.
 - The short launch form is selected by a `--` separator immediately after the ASCII process name.
+- Launch and explicit `start` creation accept repeatable `--env-file <path>` options before the `--` separator. `restart --recapture-env` is the explicit opt-in for replacing a stored client environment capture and enables repeatable `--env-file <path>` options.
 - New names use only ASCII letters, digits, `.`, `_`, `-`, and `:`, with no whitespace. Operation words are not reserved, and names are passed as one command-line argument with normal shell/OS argument-boundary rules.
 - `run` is an optional explicit launch alias, not a requirement.
 - Lifecycle result codes are `0` for success, `1` for generic failure, `3` for missing records, `4` for duplicate records, and `5` for invalid state. CLI usage errors use `2`.
@@ -62,6 +63,7 @@ Phase 2 implementation decisions:
 
 - `ProjectPath` is constructed only from canonicalized existing directories. The current working directory is resolved directly; Git-root discovery is not performed.
 - `ProcessKey` owns the canonical `ProjectPath` and process name. Process names use ASCII letters, digits, `.`, `_`, `-`, and `:`. Registry access accepts only a complete `ProcessKey`, never a name alone.
+- Environment configuration is record data separate from the command: a client capture, ordered dotenv paths, and explicit per-record overrides/removals.
 - New records begin in `starting`; valid transitions cover successful startup, graceful stopping, natural failure, and forceful termination. Terminal states cannot transition further.
 - The in-memory registry rejects duplicate canonical keys while allowing identical names under distinct project paths. Durable storage was implemented in Phase 3.
 
@@ -86,6 +88,7 @@ Phase 3 implementation decisions:
   `(project_path, name)` index, uses SQLite transactions for atomic record
   updates, and keeps the database private to the user.
 - Every record load validates lifecycle fields, working-directory/key consistency, SQLite identity columns, and derived log paths before it is listed, reconciled, or removed.
+- Environment input storage must preserve platform environment bytes where supported, remain private to the Park user, and never store the merged effective environment.
 - Log files are created independently with exclusive creation before a record is persisted. Terminal records and logs remain until explicit removal.
 - Reconciliation accepts an injected liveness check; platform-specific PID and process-group ownership checks are not yet implemented for all supported Unix platforms.
 
@@ -197,6 +200,32 @@ Phase 8 implementation decisions:
 - Monitor and reconciliation updates use compare-and-swap against the record snapshot they observed, preventing stale terminal updates from overwriting a newer start or restart. SQLite connections wait briefly on transient locks.
 - Linux ownership checks validate PID start time, process group, and session. Descendant-only groups are recognized by matching the recorded group/session, while a reused bare group ID is not trusted. Non-Linux Unix ownership verification remains a documented limitation.
 - IPC request reads and response writes have finite deadlines. Capture tasks remain independent of IPC clients.
+
+## Phase 9: Environment Inputs and Extended Start
+
+- [ ] Extend launch parsing with repeatable `--env-file <path>` options before the command separator.
+- [ ] Capture the complete client environment for initial launch and explicit `start <name> -- <command>...` creation.
+- [ ] Carry lossless client environment entries and dotenv paths over versioned IPC; the client must not read dotenv files.
+- [ ] Resolve and parse dotenv files in the daemon for every process spawn.
+- [ ] Define and implement the restricted dotenv grammar without shell evaluation, command substitution, or implicit execution.
+- [ ] Persist the client capture, ordered dotenv paths, and explicit environment overrides/removals without persisting the merged result.
+- [ ] Add the required SQLite schema migration and validation for environment inputs.
+- [ ] Spawn with the resolved environment rather than inheriting the daemon environment, including using the resolved `PATH` for executable lookup.
+- [ ] Add `restart --recapture-env` to replace the stored client capture only through an explicit request, and accept repeatable `--env-file <path>` options only with that flag.
+- [ ] Make `start <name> -- <command>...` create a new record only for an unused project/name key while preserving duplicate protection.
+- [ ] Implement `park env <name>` inspection with deterministic human and JSON output.
+- [ ] Implement `park env --set KEY=VALUE` and `--unset KEY` as persistent per-record overrides/removals that affect only future spawns.
+- [ ] Preflight environment resolution before stopping an active process for restart, so an invalid dotenv file does not cause avoidable downtime.
+- [ ] Test capture, dotenv precedence and rereading, server-side file access, missing/invalid files, explicit updates, recapture, restart behavior, and new-record `start` behavior.
+
+Phase 9 implementation decisions:
+
+- The effective environment is evaluated as dotenv files in command-line order, then the captured client environment, then explicit per-record overrides and removals. Later dotenv files override earlier files; captured client values override dotenv values; explicit removals win over every source.
+- The record stores source inputs rather than the merged result. A normal restart reuses the stored client capture and rereads the stored dotenv paths. `--recapture-env` supplies a new client capture for that restart and enables repeatable `--env-file <path>` options. Supplied paths replace the stored dotenv list; omitted paths retain it. The replacement is committed only after environment preflight and a successful spawn.
+- Relative dotenv paths are resolved by the daemon from the canonical project directory. The daemon reads files as data and reports read or parse errors without spawning a child. Restart evaluates them before stopping an active group.
+- `park env` displays the currently resolved environment. Its `--set` and `--unset` options edit explicit record-level overrides; they cannot mutate the environment of an already running process.
+- `start <name>` retains its existing-record behavior. With `-- <command>...`, it creates a new record only when no record exists for the complete canonical project/name key; an existing retained record returns a duplicate result.
+- Environment values may contain `=`; the first separator in `KEY=VALUE` is structural. Dotenv parsing is data-only and must not execute shell syntax. A third-party dotenv parser is not approved yet; compare a small internal parser with candidate crates before implementation and record any approval here.
 
 ## Roadmap
 

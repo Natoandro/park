@@ -31,7 +31,7 @@ The current feature set includes:
 The normal launch form remains:
 
 ```bash
-park <name> -- <command> [arguments...]
+park <name> [--env-file <path>]... -- <command> [arguments...]
 ```
 
 Park does not require a project manifest for routine use. Project resolution is
@@ -62,6 +62,8 @@ The following capabilities are not yet implemented:
 - Explicit reboot recovery policies.
 - Graceful daemon upgrades that preserve active managed processes.
 - Log rotation, retention, pruning, and compression.
+- Client environment capture, server-side dotenv loading, and the `park env`
+  inspection/update command.
 - Faster and richer log queries, structured log metadata, and optional external
   log export.
 

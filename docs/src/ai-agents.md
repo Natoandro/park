@@ -55,7 +55,7 @@ The operational interface remains Park itself. Agents should:
 
 1. Run from the project directory associated with the process.
 2. Inspect existing records with `park ps --json` before choosing a name.
-3. Launch with `park <name> -- <command> [arguments...]`.
+3. Launch with `park <name> [--env-file <path>]... -- <command> [arguments...]`.
 4. Wait for `running` or a literal readiness message with `park wait`.
 5. Use `park status <name> --json` and `park logs <name>` to diagnose failures.
 6. Stop or remove only records that belong to the task or that the user asked to control.

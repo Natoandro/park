@@ -35,6 +35,10 @@ record includes:
 - The ASCII process name and lossless canonical project path.
 - The recorded working directory.
 - The exact executable and argument vector.
+- The complete client environment captured when the record was created or
+  explicitly recaptured.
+- The ordered dotenv file paths associated with the record.
+- Explicit per-record environment overrides and removals.
 - Process and process-group identifiers where supported.
 - Creation, start, and exit timestamps.
 - Lifecycle state, exit code, and termination signal.
@@ -59,11 +63,25 @@ The current SQLite schema is version 1, recorded with SQLite's
 - `process_arguments` stores one raw argument BLOB per zero-based position,
   keyed by the process record digest.
 
+The environment extension will add normalized storage for the captured client
+entries, ordered dotenv file paths, and explicit per-record overrides/removals.
+Those inputs must be updated transactionally with the record. A later schema
+version must not replace them with a serialized merged environment, because
+dotenv files are intentionally reevaluated at spawn time.
+
 Storing process names as SQLite `TEXT` is not yet implemented and is tracked on
 the [roadmap](../../implementation-plan.md#roadmap).
 
 The working directory and stdout/stderr log paths are derived from the canonical
 process key and are not duplicated in SQLite.
+
+Environment inputs are stored separately from command arguments. Environment
+keys and values use the platform's lossless byte representation where supported;
+the database and its containing directory remain private to the Park user.
+The stored inputs are not an effective-environment snapshot: the daemon rereads
+the recorded dotenv files for every `start` and `restart`, then applies the
+explicit overrides and removals. This means a dotenv edit affects the next
+spawn without changing the stored client capture.
 
 ## Logs
 
@@ -83,6 +101,11 @@ Restarts and starts append to the existing stream logs. Literal filtering is
 performed on retained lines before `head` or `tail`; follow operations send a
 bounded initial snapshot and then stream appended content without allowing the
 client to block capture.
+
+Environment values are not shown by `ps` or `status`. `park env` resolves the
+current effective environment and can update explicit per-record overrides.
+Changing those overrides affects only a future spawn because a running process'
+environment cannot be changed through Park.
 
 Log rotation, retention, pruning, compression, structured log metadata,
 SQLite-backed log indexes or chunks, and external export are not part of the

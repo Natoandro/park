@@ -166,6 +166,25 @@ The lifecycle exit codes are:
 - `4`: duplicate record
 - `5`: invalid lifecycle state
 
+## Environment Inputs
+
+When a record is created, the client captures its complete environment. The
+optional repeatable `--env-file <path>` option lets the daemon layer dotenv files
+onto that capture without the client reading them:
+
+```bash
+park dev --env-file .env --env-file .env.local -- pnpm dev
+park env dev
+```
+
+The capture and file paths are stored, but the merged environment is reevaluated
+for every spawn. Dotenv changes therefore apply to later `start` and `restart`
+operations. `restart --recapture-env` explicitly replaces the stored client
+capture and enables repeatable `--env-file` arguments; supplied files replace
+the stored dotenv list, while omitted files retain it. `park env --set KEY=VALUE` and `--unset KEY` manage per-record
+overrides for future spawns. Environment values are not included in ordinary
+status output.
+
 ## State And Platform Scope
 
 Park stores process metadata in SQLite at

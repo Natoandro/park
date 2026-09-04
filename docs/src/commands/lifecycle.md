@@ -8,11 +8,15 @@ park ps [--json]
 park status <name> [--json]
 park stop <name> [--force]
 park restart <name>
+park restart <name> --recapture-env [--env-file <path>]...
 park start <name>
+park start <name> [--env-file <path>]... -- <command> [arguments...]
 park signal <name> <SIGNAL>
 park rm <name> [--keep-logs]
 park clean
 park wait <name> (--state STATE | --match TEXT | --exit) [--timeout DURATION]
+park env <name> [--json]
+park env <name> [--set KEY=VALUE]... [--unset KEY]... [--json]
 ```
 
 The operation commands also accept long-option aliases such as
@@ -51,11 +55,39 @@ processes are included where the platform supports process groups.
 
 `restart` stops an active process when necessary, then starts it again from the
 recorded executable, arguments, and working directory. It can also restart a
-terminal record. `start` only starts a retained terminal record.
+terminal record. By default it uses the record's captured client environment,
+but rereads its dotenv files. `--recapture-env` replaces the stored client
+snapshot with the environment of the calling client before the restart. The
+flag enables repeatable `--env-file` arguments. When supplied, those paths
+replace the record's stored dotenv file list; when omitted, the existing list is
+retained.
+
+The replacement capture is a candidate until environment resolution and spawn
+succeed. A failed preflight or spawn does not replace the prior stored capture.
+
+`start <name>` starts a retained terminal record using its recorded command and
+environment inputs. `start <name> -- <command> [arguments...]` is also an
+explicit creation form: when the complete project/name key does not exist, it
+creates and starts a new record, capturing the calling client's environment.
+The optional `--env-file` arguments apply to this creation form. If the key is
+already retained, the request returns the normal duplicate-record result rather
+than replacing it.
 
 Both operations reset the current lifecycle fields and append new output to
 the existing stdout and stderr logs. Neither operation creates a second record
 for the name.
+
+## Environment
+
+Use `park env <name>` to inspect the effective environment for the next spawn.
+Use `--set KEY=VALUE` to add or replace an explicit per-record value and
+`--unset KEY` to remove a variable even when it is present in a captured
+snapshot or dotenv file. Environment updates do not mutate an already running
+process; they apply to the next `start` or `restart`.
+
+The merged environment is reevaluated for each spawn. `park env` therefore
+reflects current dotenv contents rather than a persisted merged snapshot. See
+[Environment](environment.md) for source precedence and dotenv behavior.
 
 ## Remove and Clean
 

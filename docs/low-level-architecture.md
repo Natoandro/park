@@ -6,6 +6,9 @@ Persist one record per canonical `(project_path, name)` key. A record requires:
 
 - `name`, canonical `project_path`, and recorded `working_directory`
 - exact executable plus argument vector, never a lossy display-string reconstruction
+- complete client environment capture used as the base environment
+- ordered dotenv file paths to reread at spawn time
+- explicit environment overrides and removals managed by `park env`
 - `pid` and process-group identifier where supported
 - `created_at`, `started_at`, and `exited_at`
 - state, exit code, and termination signal
@@ -40,10 +43,12 @@ uses built-in defaults; a present file must be readable and valid TOML.
 
 1. Validate the canonical key is absent; explicit replacement is not yet implemented because lifecycle semantics are not complete.
 2. Create durable record and log destinations before spawning.
-3. On Linux, spawn a Park supervisor directly from the executable and argument vector in the recorded working directory. The supervisor starts the managed command without a shell and kills its process group when the daemon dies. Other Unix platforms currently spawn the managed command directly.
-4. Create a new process group/session on supported Unix platforms.
-5. Pipe stdout and stderr to independent asynchronous writers.
-6. Mark `running` only after spawn succeeds; monitor the child and persist terminal state exactly once.
+3. Capture the complete client environment for a new record, or select the stored capture for a later start. A restart with `--recapture-env` supplies a replacement capture.
+4. Resolve the effective environment by reading the stored dotenv files in order and applying explicit `park env` edits. Do not persist the merged result.
+5. On Linux, spawn a Park supervisor directly from the executable and argument vector in the recorded working directory. The supervisor starts the managed command without a shell and kills its process group when the daemon dies. Other Unix platforms currently spawn the managed command directly.
+6. Create a new process group/session on supported Unix platforms.
+7. Pipe stdout and stderr to independent asynchronous writers.
+8. Mark `running` only after spawn succeeds; monitor the child and persist terminal state exactly once.
 
 If spawn fails, retain a `failed` record with the diagnostic rather than leaving a partial running record. On daemon startup, reconcile non-terminal records against live PIDs/process groups and mark dead processes as terminal without discarding their logs.
 
@@ -53,7 +58,7 @@ Launch reserves its complete process key in the daemon for the check/create/spaw
 
 `stop` transitions a running record to `stopping`, sends SIGTERM to its process group, waits for the configured grace period, and sends SIGKILL only if still alive. `--force` skips directly to forceful termination. `signal` validates the requested supported signal and targets the same group. Terminal transitions record either the exit code or signal, and no lifecycle action may silently overwrite a record.
 
-`restart` stops the current group when necessary, then spawns from the preserved executable, arguments, and working directory. `start` is restricted to retained terminal records. Both operations reset the lifecycle fields and append new output to the existing stream logs. Lifecycle operations serialize on an individual record so concurrent stop, restart, signal, and remove requests cannot race. `rm` is distinct from `stop`: it removes metadata and, unless `--keep-logs` is set, log files only after the process is no longer active. `clean` removes terminal records and their logs only when their recorded process group is also gone; active records are never eligible.
+`restart` stops the current group when necessary, then spawns from the preserved executable, arguments, working directory, and environment inputs. It rereads dotenv files; `--recapture-env` replaces the stored client capture with the caller's current environment and enables repeatable `--env-file` arguments. Supplied paths replace the stored dotenv file list; omitting them retains that list. `start` without a command is restricted to retained terminal records, while `start <name> -- <command>...` creates a new record only for an unused key. `park env` reads the current effective environment and updates explicit overrides or removals for future spawns. Both lifecycle operations reset the lifecycle fields and append new output to the existing stream logs. Lifecycle operations serialize on an individual record so concurrent stop, restart, signal, and remove requests cannot race. `rm` is distinct from `stop`: it removes metadata and, unless `--keep-logs` is set, log files only after the process is no longer active. `clean` removes terminal records and their logs only when their recorded process group is also gone; active records are never eligible.
 
 `wait --state` compares an exact state, `wait --exit` matches every terminal state, and `wait --match` searches both append-only log streams for a literal byte substring. Match searches include historical output and later appended output from restart/start cycles. Wait is a streaming IPC operation with periodic bounded heartbeat frames; it checks immediately, polls at a fixed interval, returns the matching record, and reports a generic failure on timeout.
 

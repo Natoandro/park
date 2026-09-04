@@ -31,11 +31,18 @@ Use the `--` separator and pass the executable and arguments separately:
 ```bash
 park dev -- pnpm dev
 park worker -- cargo run --bin worker
+park api --env-file .env --env-file .env.local -- ./bin/api --port 3000
 ```
 
 Park records the exact argument vector. It does not implicitly invoke a shell.
 Use an explicit shell command such as `sh -lc '...'` only when shell behavior is
 needed.
+
+At creation, Park captures the complete client environment. `--env-file` is
+repeatable; the daemon reads those files, not the client. Dotenv values are
+layered in argument order, captured client values take precedence over dotenv
+values, and explicit values managed with `park env` take final precedence. The
+merged environment is not persisted, so dotenv changes apply to later spawns.
 
 After starting a process, wait for a useful condition instead of assuming that
 the launch means the service is ready:
@@ -70,6 +77,24 @@ user explicitly requests stopping it. Prefer graceful stop over `--force`.
 park restart dev
 park stop dev
 ```
+
+Normal restart reuses the stored client environment capture and rereads the
+record's dotenv files. Use `--recapture-env` only when the current client
+environment should replace the stored capture. That flag also enables repeated
+`--env-file` arguments; supplied files replace the record's stored dotenv-file
+list, while omitting them retains the existing list:
+
+```bash
+park restart dev --recapture-env
+park restart dev --recapture-env --env-file .env --env-file .env.local
+```
+
+Use `park start <name> -- <command> [arguments...]` to create a new record when
+the project/name key is unused. An existing record is never silently replaced.
+Use `park env <name>` to inspect the effective environment, or update future
+spawns with `--set KEY=VALUE` and `--unset KEY`. Environment updates do not
+change an already running process. Environment captures can contain secrets, so
+only inspect them when needed and treat the Park state directory as sensitive.
 
 Records remain available after exit. Use `park rm <name>` only for an inactive
 record when its history is no longer needed. Do not use `park clean` as a broad
