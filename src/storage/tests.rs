@@ -206,7 +206,7 @@ fn stores_records_in_normalized_tables() {
     let version: i32 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("schema version should be readable");
-    assert_eq!(version, 1);
+    assert_eq!(version, 2);
     let argument_count: i64 = connection
         .query_row(
             "SELECT count(*) FROM process_arguments WHERE key_digest = ?1",
@@ -215,6 +215,62 @@ fn stores_records_in_normalized_tables() {
         )
         .expect("argument rows should be countable");
     assert_eq!(argument_count, 1);
+}
+
+#[test]
+fn migrates_version_one_databases_for_environment_inputs() {
+    let root = TempDir::new();
+    let paths = test_paths(&root);
+    fs::create_dir_all(paths.state_dir()).expect("state directory should be created");
+    let connection =
+        rusqlite::Connection::open(paths.database_path()).expect("database should open");
+    connection
+        .execute_batch(
+            "CREATE TABLE process_records (
+                key_digest TEXT PRIMARY KEY NOT NULL,
+                project_path BLOB NOT NULL,
+                name BLOB NOT NULL,
+                executable BLOB NOT NULL,
+                pid INTEGER,
+                process_group_id INTEGER,
+                process_start_time TEXT,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                exited_at TEXT,
+                state TEXT NOT NULL,
+                exit_code INTEGER,
+                termination_signal INTEGER,
+                failure_reason TEXT
+            );
+            CREATE TABLE process_arguments (
+                key_digest TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                value BLOB NOT NULL,
+                PRIMARY KEY(key_digest, position)
+            );
+            PRAGMA user_version = 1;",
+        )
+        .expect("version one schema should be created");
+    drop(connection);
+
+    paths
+        .ensure_directories()
+        .expect("version one schema should migrate");
+    let connection =
+        rusqlite::Connection::open(paths.database_path()).expect("database should open");
+    let version: i32 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("schema version should be readable");
+    assert_eq!(version, 2);
+    let columns: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('process_records')
+             WHERE name IN ('environment_capture', 'dotenv_files', 'environment_overrides')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("environment columns should be present");
+    assert_eq!(columns, 3);
 }
 
 #[test]

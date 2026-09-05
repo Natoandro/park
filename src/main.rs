@@ -4,10 +4,10 @@ use park_cli::{
     CommandResult, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, Invocation,
     IpcLogOptions, Operation, ResultStatus, StoragePaths, command_help_result, parse_invocation,
     render_json, request_for_clean, request_for_daemon_config, request_for_daemon_status,
-    request_for_launch, request_for_logs, request_for_ps, request_for_remove, request_for_restart,
-    request_for_signal, request_for_start, request_for_status, request_for_stop, request_for_wait,
-    request_with_daemon_start, resolve_current_project, run_daemon, skills_help_result,
-    stream_request_with_daemon_start,
+    request_for_env, request_for_launch, request_for_logs, request_for_ps, request_for_remove,
+    request_for_restart, request_for_signal, request_for_start, request_for_status,
+    request_for_stop, request_for_wait, request_with_daemon_start, resolve_current_project,
+    run_daemon, skills_help_result, stream_request_with_daemon_start,
 };
 use serde_json::Value;
 
@@ -180,7 +180,19 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
     };
 
     let request = match invocation {
-        Invocation::Launch { name, command } => request_for_launch(1, project, name, command),
+        Invocation::Launch {
+            name,
+            env_files,
+            command,
+        } => {
+            let environment = match park_cli::EnvironmentCapture::from_process() {
+                Ok(capture) => park_cli::EnvironmentSpec::from_capture(capture, env_files),
+                Err(error) => {
+                    return CommandResult::error(ResultStatus::Failure, error.to_string());
+                }
+            };
+            request_for_launch(1, project, name, command, environment)
+        }
         Invocation::Operation(Operation::Ps { .. }) => request_for_ps(1, project),
         Invocation::Operation(Operation::Status { name, .. }) => {
             request_for_status(1, park_cli::ProcessKey::new(project, name))
@@ -244,11 +256,47 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
         Invocation::Operation(Operation::Signal { name, signal }) => {
             request_for_signal(1, park_cli::ProcessKey::new(project, name), signal)
         }
-        Invocation::Operation(Operation::Restart { name }) => {
-            request_for_restart(1, park_cli::ProcessKey::new(project, name))
+        Invocation::Operation(Operation::Restart(args)) => {
+            let recapture = if args.recapture_env {
+                let capture = match park_cli::EnvironmentCapture::from_process() {
+                    Ok(capture) => capture,
+                    Err(error) => {
+                        return CommandResult::error(ResultStatus::Failure, error.to_string());
+                    }
+                };
+                Some(park_cli::RecaptureEnvironment {
+                    capture,
+                    dotenv_files: (!args.env_files.is_empty()).then_some(args.env_files),
+                })
+            } else {
+                None
+            };
+            request_for_restart(1, park_cli::ProcessKey::new(project, args.name), recapture)
         }
-        Invocation::Operation(Operation::Start { name }) => {
-            request_for_start(1, park_cli::ProcessKey::new(project, name))
+        Invocation::Operation(Operation::Start(args)) => {
+            let (command, environment) = if args.command.is_empty() {
+                (None, None)
+            } else {
+                let capture = match park_cli::EnvironmentCapture::from_process() {
+                    Ok(capture) => capture,
+                    Err(error) => {
+                        return CommandResult::error(ResultStatus::Failure, error.to_string());
+                    }
+                };
+                (
+                    Some(args.command),
+                    Some(park_cli::EnvironmentSpec::from_capture(
+                        capture,
+                        args.env_files,
+                    )),
+                )
+            };
+            request_for_start(
+                1,
+                park_cli::ProcessKey::new(project, args.name),
+                command,
+                environment,
+            )
         }
         Invocation::Operation(Operation::Rm { name, keep_logs }) => {
             request_for_remove(1, park_cli::ProcessKey::new(project, name), keep_logs)
@@ -280,6 +328,12 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
             };
             return CommandResult::success(data.get("record").cloned(), None);
         }
+        Invocation::Operation(Operation::Env(args)) => request_for_env(
+            1,
+            park_cli::ProcessKey::new(project, args.name),
+            args.set,
+            args.unset,
+        ),
         Invocation::Operation(Operation::Help | Operation::HelpSkills { .. }) => {
             unreachable!("skills help is handled before daemon setup")
         }

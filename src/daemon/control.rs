@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::time::Duration;
 
 use nix::sys::signal::{Signal, killpg};
@@ -23,8 +25,17 @@ pub(super) async fn handle(
     match operation {
         IpcOperation::Stop { key, force } => stop(state, request_id, key, force).await,
         IpcOperation::Signal { key, signal: name } => signal(state, request_id, key, &name).await,
-        IpcOperation::Restart { key } => restart(state, request_id, key).await,
-        IpcOperation::Start { key } => start(state, request_id, key).await,
+        IpcOperation::Restart { key, recapture } => {
+            restart(state, request_id, key, recapture).await
+        }
+        IpcOperation::Start {
+            key,
+            command,
+            environment,
+        } => start(state, request_id, key, command, environment).await,
+        IpcOperation::Env { key, set, unset } => {
+            environment(state, request_id, key, set, unset).await
+        }
         IpcOperation::Remove { key, keep_logs } => remove(state, request_id, key, keep_logs).await,
         IpcOperation::Clean => clean(state, request_id).await,
         _ => IpcResponse::error(
@@ -172,12 +183,34 @@ async fn signal(state: &DaemonState, request_id: u64, key: ProcessKey, name: &st
     }
 }
 
-async fn restart(state: &DaemonState, request_id: u64, key: ProcessKey) -> IpcResponse {
+async fn restart(
+    state: &DaemonState,
+    request_id: u64,
+    key: ProcessKey,
+    recapture: Option<crate::ipc::RecaptureEnvironment>,
+) -> IpcResponse {
     let lock = state.lifecycle_lock(&key);
     let _guard = lock.lock().await;
     let Some(mut record) = load_record(state, request_id, &key) else {
         return missing_or_failure(state, request_id, &key);
     };
+    let candidate_environment = recapture.map_or_else(
+        || record.environment().clone(),
+        |recapture| crate::environment::EnvironmentSpec {
+            capture: recapture.capture,
+            dotenv_files: recapture
+                .dotenv_files
+                .unwrap_or_else(|| record.environment().dotenv_files.clone()),
+            overrides: record.environment().overrides.clone(),
+        },
+    );
+    if let Err(error) = candidate_environment.resolve(record.working_directory()) {
+        return IpcResponse::error(
+            request_id,
+            ResultStatus::Failure,
+            format!("could not resolve process environment: {error}"),
+        );
+    }
     if record.state() == ProcessState::Running {
         match stop_record(state, request_id, record, false).await {
             Ok(stopped) => record = stopped,
@@ -193,10 +226,34 @@ async fn restart(state: &DaemonState, request_id: u64, key: ProcessKey) -> IpcRe
             format!("cannot restart process while it is {:?}", record.state()),
         );
     }
-    relaunch(state, request_id, record).await
+    relaunch(state, request_id, record, candidate_environment).await
 }
 
-async fn start(state: &DaemonState, request_id: u64, key: ProcessKey) -> IpcResponse {
+async fn start(
+    state: &DaemonState,
+    request_id: u64,
+    key: ProcessKey,
+    command: Option<Vec<OsString>>,
+    environment: Option<crate::environment::EnvironmentSpec>,
+) -> IpcResponse {
+    if let Some(command) = command {
+        let Some(environment) = environment else {
+            return IpcResponse::error(
+                request_id,
+                ResultStatus::Failure,
+                "new start requests require environment inputs",
+            );
+        };
+        return launch::start(
+            state,
+            request_id,
+            crate::project::ProjectPath::from_canonical(key.project_path().to_path_buf()),
+            key.name().to_os_string(),
+            command,
+            environment,
+        )
+        .await;
+    }
     let lock = state.lifecycle_lock(&key);
     let _guard = lock.lock().await;
     let Some(record) = load_record(state, request_id, &key) else {
@@ -205,17 +262,77 @@ async fn start(state: &DaemonState, request_id: u64, key: ProcessKey) -> IpcResp
     if let Err(error) = record.state().validate_action(LifecycleAction::Start) {
         return IpcResponse::error(request_id, ResultStatus::InvalidState, error.to_string());
     }
-    relaunch(state, request_id, record).await
+    let environment = record.environment().clone();
+    relaunch(state, request_id, record, environment).await
 }
 
-async fn relaunch(state: &DaemonState, request_id: u64, mut record: ProcessRecord) -> IpcResponse {
+async fn relaunch(
+    state: &DaemonState,
+    request_id: u64,
+    mut record: ProcessRecord,
+    environment: crate::environment::EnvironmentSpec,
+) -> IpcResponse {
+    let previous_environment = record.environment().clone();
+    record.set_environment(environment);
     if let Err(error) = record.reset_for_start() {
         return IpcResponse::error(request_id, ResultStatus::InvalidState, error.to_string());
     }
     if let Err(error) = state.storage.save_record(&record) {
         return storage_response(request_id, error);
     }
-    launch::spawn_record(state, request_id, record).await
+    launch::spawn_record_with_previous(state, request_id, record, Some(previous_environment)).await
+}
+
+async fn environment(
+    state: &DaemonState,
+    request_id: u64,
+    key: ProcessKey,
+    set: Vec<OsString>,
+    unset: Vec<OsString>,
+) -> IpcResponse {
+    let lock = state.lifecycle_lock(&key);
+    let _guard = lock.lock().await;
+    let Some(mut record) = load_record(state, request_id, &key) else {
+        return missing_or_failure(state, request_id, &key);
+    };
+    let mutated = !set.is_empty() || !unset.is_empty();
+    let mut inputs = record.environment().clone();
+    for value in set {
+        let Some((key, value)) = split_assignment(&value) else {
+            return IpcResponse::error(
+                request_id,
+                ResultStatus::Failure,
+                "--set requires KEY=VALUE",
+            );
+        };
+        if let Err(error) = inputs.set(key, value) {
+            return IpcResponse::error(request_id, ResultStatus::Failure, error.to_string());
+        }
+    }
+    for key in unset {
+        if let Err(error) = inputs.unset(key) {
+            return IpcResponse::error(request_id, ResultStatus::Failure, error.to_string());
+        }
+    }
+    if mutated {
+        record.set_environment(inputs);
+        if let Err(error) = state.storage.save_record(&record) {
+            return storage_response(request_id, error);
+        }
+    }
+    match record.environment().resolve(record.working_directory()) {
+        Ok(environment) => IpcResponse::success(request_id, Some(environment.display_value())),
+        Err(error) => IpcResponse::error(request_id, ResultStatus::Failure, error.to_string()),
+    }
+}
+
+fn split_assignment(value: &OsString) -> Option<(OsString, OsString)> {
+    let bytes = value.as_bytes();
+    let separator = bytes.iter().position(|byte| *byte == b'=')?;
+    Some((
+        OsString::from_vec(bytes[..separator].to_vec()),
+        OsString::from_vec(bytes[separator + 1..].to_vec()),
+    ))
 }
 
 async fn remove(

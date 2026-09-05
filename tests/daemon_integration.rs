@@ -35,6 +35,18 @@ impl TestEnvironment {
         run_with_root(&self.root, args)
     }
 
+    fn run_with_vars(&self, args: &[&str], vars: &[(&str, &str)]) -> Output {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_park"));
+        command
+            .args(args)
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .env("XDG_STATE_HOME", self.root.join("state"))
+            .env("XDG_RUNTIME_DIR", self.root.join("runtime"))
+            .env("XDG_CONFIG_HOME", self.root.join("config"))
+            .envs(vars.iter().copied());
+        command.output().expect("park command should run")
+    }
+
     fn pid_path(&self) -> PathBuf {
         self.runtime_dir().join("park/daemon.pid")
     }
@@ -238,6 +250,112 @@ fn launches_captures_both_streams_and_retains_the_terminal_record() {
     assert_eq!(
         fs::read_to_string(stderr_path).expect("stderr log should be readable"),
         "stderr"
+    );
+}
+
+#[test]
+fn captures_client_environment_and_rereads_dotenv_files_in_the_daemon() {
+    let environment = TestEnvironment::new();
+    let dotenv = environment.root.join("test.env");
+    fs::write(&dotenv, "PARK_DOTENV=dotenv\nPARK_CAPTURE=from-dotenv\n")
+        .expect("dotenv file should be written");
+    let dotenv = dotenv.to_string_lossy().into_owned();
+    let launch = environment.run_with_vars(
+        &[
+            "env-capture",
+            "--env-file",
+            &dotenv,
+            "--",
+            "/bin/sh",
+            "-c",
+            "printf '%s:%s' \"$PARK_DOTENV\" \"$PARK_CAPTURE\"",
+        ],
+        &[("PARK_CAPTURE", "captured")],
+    );
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    assert_eq!(wait_for_state(&environment, "env-capture"), "exited");
+    let logs = environment.run(&["logs", "env-capture", "--stdout"]);
+    assert!(logs.status.success(), "stderr: {:?}", logs.stderr);
+    assert_eq!(String::from_utf8_lossy(&logs.stdout), "dotenv:captured");
+
+    fs::write(&dotenv, "PARK_DOTENV=changed\nPARK_CAPTURE=changed\n")
+        .expect("dotenv file should be updated");
+    let restart = environment.run(&["restart", "env-capture"]);
+    assert!(restart.status.success(), "stderr: {:?}", restart.stderr);
+    assert_eq!(wait_for_state(&environment, "env-capture"), "exited");
+    let logs = environment.run(&["logs", "env-capture", "--stdout"]);
+    assert!(logs.status.success(), "stderr: {:?}", logs.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&logs.stdout),
+        "dotenv:capturedchanged:captured"
+    );
+
+    let recapture = environment.run_with_vars(
+        &["restart", "env-capture", "--recapture-env"],
+        &[("PARK_CAPTURE", "recaptured")],
+    );
+    assert!(recapture.status.success(), "stderr: {:?}", recapture.stderr);
+    assert_eq!(wait_for_state(&environment, "env-capture"), "exited");
+    let logs = environment.run(&["logs", "env-capture", "--stdout"]);
+    assert!(logs.status.success(), "stderr: {:?}", logs.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&logs.stdout),
+        "dotenv:capturedchanged:capturedchanged:recaptured"
+    );
+}
+
+#[test]
+fn inspects_and_updates_explicit_environment_values() {
+    let environment = TestEnvironment::new();
+    let launch = environment.run(&["env-update", "--", "/bin/sleep", "30"]);
+    assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+
+    let update = environment.run(&[
+        "env",
+        "env-update",
+        "--set",
+        "PARK_EXPLICIT=one=two",
+        "--unset",
+        "PARK_CAPTURED",
+        "--json",
+    ]);
+    assert!(update.status.success(), "stderr: {:?}", update.stderr);
+    let response: Value = serde_json::from_slice(&update.stdout).expect("env should be JSON");
+    let status = environment.run(&["status", "env-update", "--json"]);
+    assert!(status.status.success(), "stderr: {:?}", status.stderr);
+    let status: Value = serde_json::from_slice(&status.stdout).expect("status should be JSON");
+    assert!(status["data"].get("environment").is_none());
+    let variables = response["data"]["variables"]
+        .as_array()
+        .expect("variables should be an array");
+    assert!(
+        variables.iter().any(|variable| {
+            variable["key"] == "PARK_EXPLICIT" && variable["value"] == "one=two"
+        })
+    );
+    assert!(
+        !variables
+            .iter()
+            .any(|variable| variable["key"] == "PARK_CAPTURED")
+    );
+
+    let stop = environment.run(&["stop", "env-update", "--force"]);
+    assert!(stop.status.success(), "stderr: {:?}", stop.stderr);
+}
+
+#[test]
+fn start_with_a_command_creates_a_new_record() {
+    let environment = TestEnvironment::new();
+    let start = environment.run(&["start", "created", "--", "/bin/true"]);
+    assert!(start.status.success(), "stderr: {:?}", start.stderr);
+    assert_eq!(wait_for_state(&environment, "created"), "exited");
+
+    let duplicate = environment.run(&["start", "created", "--", "/bin/true"]);
+    assert_eq!(
+        duplicate.status.code(),
+        Some(4),
+        "stderr: {:?}",
+        duplicate.stderr
     );
 }
 

@@ -110,7 +110,8 @@ impl Storage {
             .prepare(
                 "SELECT key_digest, project_path, name, executable, pid,
                         process_group_id, process_start_time, created_at, started_at,
-                        exited_at, state, exit_code, termination_signal, failure_reason
+                        exited_at, state, exit_code, termination_signal, failure_reason,
+                        environment_capture, dotenv_files, environment_overrides
                  FROM process_records ORDER BY project_path, name",
             )
             .map_err(|source| StorageError::Sqlite {

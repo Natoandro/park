@@ -7,6 +7,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 use tokio::time::{Duration, timeout};
 
+use crate::environment::{EnvironmentCapture, EnvironmentSpec};
 use crate::lifecycle::ProcessState;
 use crate::process::{ProcessKey, ProcessRecord};
 use crate::project::ProjectPath;
@@ -42,6 +43,7 @@ pub enum IpcOperation {
         name: OsString,
         #[serde(with = "crate::os_string::vec")]
         command: Vec<OsString>,
+        environment: EnvironmentSpec,
     },
     Ps {
         project_path: ProjectPath,
@@ -68,9 +70,12 @@ pub enum IpcOperation {
     },
     Restart {
         key: ProcessKey,
+        recapture: Option<RecaptureEnvironment>,
     },
     Start {
         key: ProcessKey,
+        command: Option<Vec<OsString>>,
+        environment: Option<EnvironmentSpec>,
     },
     #[serde(rename = "rm")]
     Remove {
@@ -85,6 +90,20 @@ pub enum IpcOperation {
         exit: bool,
         timeout_ms: Option<u64>,
     },
+    Env {
+        key: ProcessKey,
+        #[serde(with = "crate::os_string::vec")]
+        set: Vec<OsString>,
+        #[serde(with = "crate::os_string::vec")]
+        unset: Vec<OsString>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecaptureEnvironment {
+    pub capture: EnvironmentCapture,
+    #[serde(with = "crate::os_string::vec_option")]
+    pub dotenv_files: Option<Vec<OsString>>,
 }
 
 impl IpcRequest {
@@ -352,6 +371,7 @@ pub fn request_for_launch(
     project_path: ProjectPath,
     name: OsString,
     command: Vec<OsString>,
+    environment: EnvironmentSpec,
 ) -> IpcRequest {
     IpcRequest::new(
         request_id,
@@ -359,6 +379,7 @@ pub fn request_for_launch(
             project_path,
             name,
             command,
+            environment,
         },
     )
 }
@@ -390,12 +411,37 @@ pub fn request_for_signal(request_id: u64, key: ProcessKey, signal: String) -> I
     IpcRequest::new(request_id, IpcOperation::Signal { key, signal })
 }
 
-pub fn request_for_restart(request_id: u64, key: ProcessKey) -> IpcRequest {
-    IpcRequest::new(request_id, IpcOperation::Restart { key })
+pub fn request_for_restart(
+    request_id: u64,
+    key: ProcessKey,
+    recapture: Option<RecaptureEnvironment>,
+) -> IpcRequest {
+    IpcRequest::new(request_id, IpcOperation::Restart { key, recapture })
 }
 
-pub fn request_for_start(request_id: u64, key: ProcessKey) -> IpcRequest {
-    IpcRequest::new(request_id, IpcOperation::Start { key })
+pub fn request_for_start(
+    request_id: u64,
+    key: ProcessKey,
+    command: Option<Vec<OsString>>,
+    environment: Option<EnvironmentSpec>,
+) -> IpcRequest {
+    IpcRequest::new(
+        request_id,
+        IpcOperation::Start {
+            key,
+            command,
+            environment,
+        },
+    )
+}
+
+pub fn request_for_env(
+    request_id: u64,
+    key: ProcessKey,
+    set: Vec<OsString>,
+    unset: Vec<OsString>,
+) -> IpcRequest {
+    IpcRequest::new(request_id, IpcOperation::Env { key, set, unset })
 }
 
 pub fn request_for_remove(request_id: u64, key: ProcessKey, keep_logs: bool) -> IpcRequest {
@@ -531,6 +577,7 @@ mod tests {
             ProjectPath::from_canonical("/project".into()),
             OsString::from("dev"),
             vec![OsString::from("server"), OsString::from("--dev")],
+            EnvironmentSpec::default(),
         );
         let decoded: IpcRequest = serde_json::from_value(
             serde_json::to_value(request).expect("request should serialize"),

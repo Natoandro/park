@@ -1,8 +1,8 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 
 use super::StorageError;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 pub(super) fn initialize(connection: &mut Connection) -> Result<(), StorageError> {
     connection
@@ -21,10 +21,13 @@ pub(super) fn initialize(connection: &mut Connection) -> Result<(), StorageError
         return Err(StorageError::UnsupportedSchemaVersion { version });
     }
 
+    if version == 1 {
+        migrate_v1(connection)?;
+    }
     create(connection)?;
     if version != SCHEMA_VERSION {
         connection
-            .execute_batch("PRAGMA user_version = 1;")
+            .execute_batch("PRAGMA user_version = 2;")
             .map_err(|source| StorageError::Sqlite {
                 operation: "set SQLite schema version",
                 source,
@@ -50,7 +53,10 @@ fn create(connection: &Connection) -> Result<(), StorageError> {
                 state TEXT NOT NULL,
                 exit_code INTEGER,
                 termination_signal INTEGER,
-                failure_reason TEXT
+                 failure_reason TEXT,
+                 environment_capture BLOB NOT NULL DEFAULT X'5B5D',
+                 dotenv_files BLOB NOT NULL DEFAULT X'5B5D',
+                 environment_overrides BLOB NOT NULL DEFAULT X'5B5D'
             );
             CREATE UNIQUE INDEX IF NOT EXISTS process_records_identity
                 ON process_records(project_path, name);
@@ -67,4 +73,38 @@ fn create(connection: &Connection) -> Result<(), StorageError> {
             operation: "initialize SQLite schema",
             source,
         })
+}
+
+fn migrate_v1(connection: &Connection) -> Result<(), StorageError> {
+    connection
+        .execute_batch(
+            "ALTER TABLE process_records ADD COLUMN environment_capture BLOB NOT NULL DEFAULT X'5B5D';
+             ALTER TABLE process_records ADD COLUMN dotenv_files BLOB NOT NULL DEFAULT X'5B5D';
+             ALTER TABLE process_records ADD COLUMN environment_overrides BLOB NOT NULL DEFAULT X'5B5D';",
+        )
+        .map_err(|source| StorageError::Sqlite {
+            operation: "migrate SQLite environment schema",
+            source,
+        })?;
+    let capture = crate::environment::EnvironmentCapture::from_process().map_err(|error| {
+        StorageError::InvalidStoredField {
+            field: "legacy environment capture",
+            value: error.to_string(),
+        }
+    })?;
+    let capture =
+        serde_json::to_vec(&capture).map_err(|error| StorageError::InvalidStoredField {
+            field: "legacy environment capture",
+            value: error.to_string(),
+        })?;
+    connection
+        .execute(
+            "UPDATE process_records SET environment_capture = ?1",
+            params![capture],
+        )
+        .map_err(|source| StorageError::Sqlite {
+            operation: "backfill legacy environment capture",
+            source,
+        })?;
+    Ok(())
 }

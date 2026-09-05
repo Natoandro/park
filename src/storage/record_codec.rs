@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
+use crate::environment::{EnvironmentCapture, EnvironmentOverride, EnvironmentSpec};
 use crate::process::{ProcessKey, ProcessRecord, ProcessRecordParts, ProcessRecordValidationError};
 use crate::project::ProjectPath;
 
@@ -24,6 +25,9 @@ pub(super) struct StoredRecord {
     exit_code: Option<i64>,
     termination_signal: Option<i64>,
     failure_reason: Option<String>,
+    environment_capture: Vec<u8>,
+    dotenv_files: Vec<u8>,
+    environment_overrides: Vec<u8>,
 }
 
 impl StoredRecord {
@@ -47,6 +51,9 @@ impl StoredRecord {
             exit_code: row.get(11)?,
             termination_signal: row.get(12)?,
             failure_reason: row.get(13)?,
+            environment_capture: row.get(14)?,
+            dotenv_files: row.get(15)?,
+            environment_overrides: row.get(16)?,
         })
     }
 }
@@ -62,8 +69,9 @@ pub(super) fn insert_record(
         "INSERT INTO process_records
             (key_digest, project_path, name, executable, pid, process_group_id,
              process_start_time, created_at, started_at, exited_at, state, exit_code,
-             termination_signal, failure_reason)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+             termination_signal, failure_reason, environment_capture, dotenv_files,
+             environment_overrides)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         params![
             digest,
             project_bytes(record.key()),
@@ -79,6 +87,9 @@ pub(super) fn insert_record(
             record.exit_code().map(i64::from),
             record.termination_signal().map(i64::from),
             record.failure_reason(),
+            encode(&record.environment().capture)?,
+            encode(&record.environment().dotenv_files)?,
+            encode(&record.environment().overrides)?,
         ],
     )?;
     insert_arguments(transaction, &digest, record)
@@ -96,8 +107,9 @@ pub(super) fn update_record(
             project_path = ?1, name = ?2, executable = ?3, pid = ?4,
             process_group_id = ?5, process_start_time = ?6, created_at = ?7,
             started_at = ?8, exited_at = ?9, state = ?10, exit_code = ?11,
-            termination_signal = ?12, failure_reason = ?13
-         WHERE key_digest = ?14",
+             termination_signal = ?12, failure_reason = ?13, environment_capture = ?14,
+             dotenv_files = ?15, environment_overrides = ?16
+          WHERE key_digest = ?17",
         params![
             project_bytes(record.key()),
             name_bytes(record.key()),
@@ -112,6 +124,9 @@ pub(super) fn update_record(
             record.exit_code().map(i64::from),
             record.termination_signal().map(i64::from),
             record.failure_reason(),
+            encode(&record.environment().capture)?,
+            encode(&record.environment().dotenv_files)?,
+            encode(&record.environment().overrides)?,
             digest,
         ],
     )?;
@@ -159,7 +174,8 @@ pub(super) fn load_record_with_connection(
         .query_row(
             "SELECT key_digest, project_path, name, executable, pid,
                     process_group_id, process_start_time, created_at, started_at,
-                    exited_at, state, exit_code, termination_signal, failure_reason
+                    exited_at, state, exit_code, termination_signal, failure_reason,
+                    environment_capture, dotenv_files, environment_overrides
              FROM process_records WHERE key_digest = ?1",
             params![digest],
             StoredRecord::from_row,
@@ -238,6 +254,7 @@ pub(super) fn decode_stored_record(
         });
     }
 
+    let environment = decode_environment(&stored)?;
     let project_path = PathBuf::from(OsString::from_vec(stored.project_path));
     let key = ProcessKey::new(
         ProjectPath::from_canonical(project_path),
@@ -270,6 +287,7 @@ pub(super) fn decode_stored_record(
         termination_signal: decode_i32(stored.termination_signal, "termination signal")?,
         failure_reason: stored.failure_reason,
         logs: storage.log_paths(&key),
+        environment,
     })
     .map_err(|source| StorageError::InvalidRecordInvariant {
         path: storage.paths.database_path().to_path_buf(),
@@ -322,6 +340,40 @@ fn decode_required_u64(value: String, field: &'static str) -> Result<u64, Storag
     value
         .parse()
         .map_err(|_| StorageError::InvalidStoredField { field, value })
+}
+
+fn encode<T: serde::Serialize>(value: &T) -> rusqlite::Result<Vec<u8>> {
+    serde_json::to_vec(value)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+}
+
+fn decode_environment(stored: &StoredRecord) -> Result<EnvironmentSpec, StorageError> {
+    let capture: EnvironmentCapture = decode("environment capture", &stored.environment_capture)?;
+    let dotenv_files: Vec<OsString> = decode("dotenv files", &stored.dotenv_files)?;
+    let overrides: Vec<EnvironmentOverride> =
+        decode("environment overrides", &stored.environment_overrides)?;
+    let environment = EnvironmentSpec {
+        capture,
+        dotenv_files,
+        overrides,
+    };
+    environment
+        .validate()
+        .map_err(|error| StorageError::InvalidStoredField {
+            field: "environment inputs",
+            value: error.to_string(),
+        })?;
+    Ok(environment)
+}
+
+fn decode<T: serde::de::DeserializeOwned>(
+    field: &'static str,
+    value: &[u8],
+) -> Result<T, StorageError> {
+    serde_json::from_slice(value).map_err(|error| StorageError::InvalidStoredField {
+        field,
+        value: error.to_string(),
+    })
 }
 
 fn project_bytes(key: &ProcessKey) -> Vec<u8> {

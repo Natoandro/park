@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::environment::EnvironmentSpec;
 use crate::lifecycle::{InvalidStateTransition, ProcessState};
 use crate::project::ProjectPath;
 
@@ -56,6 +57,7 @@ pub(crate) struct ProcessRecordParts {
     pub termination_signal: Option<i32>,
     pub failure_reason: Option<String>,
     pub logs: LogPaths,
+    pub environment: EnvironmentSpec,
 }
 
 impl ProcessKey {
@@ -98,6 +100,8 @@ pub struct ProcessRecord {
     termination_signal: Option<i32>,
     failure_reason: Option<String>,
     logs: LogPaths,
+    #[serde(skip_serializing, default)]
+    environment: EnvironmentSpec,
 }
 
 impl ProcessRecord {
@@ -109,6 +113,26 @@ impl ProcessRecord {
         arguments: Vec<OsString>,
         created_at: EpochSeconds,
         logs: LogPaths,
+    ) -> Self {
+        Self::new_with_environment(
+            key,
+            working_directory,
+            executable,
+            arguments,
+            created_at,
+            logs,
+            EnvironmentSpec::from_capture(Default::default(), Vec::new()),
+        )
+    }
+
+    pub fn new_with_environment(
+        key: ProcessKey,
+        working_directory: PathBuf,
+        executable: OsString,
+        arguments: Vec<OsString>,
+        created_at: EpochSeconds,
+        logs: LogPaths,
+        environment: EnvironmentSpec,
     ) -> Self {
         Self {
             key,
@@ -126,6 +150,7 @@ impl ProcessRecord {
             termination_signal: None,
             failure_reason: None,
             logs,
+            environment,
         }
     }
 
@@ -147,6 +172,7 @@ impl ProcessRecord {
             termination_signal,
             failure_reason,
             logs,
+            environment,
         } = parts;
         let record = Self {
             working_directory: key.project_path().to_path_buf(),
@@ -164,6 +190,7 @@ impl ProcessRecord {
             termination_signal,
             failure_reason,
             logs,
+            environment,
         };
         record.validate()?;
         Ok(record)
@@ -229,6 +256,14 @@ impl ProcessRecord {
         &self.logs
     }
 
+    pub fn environment(&self) -> &EnvironmentSpec {
+        &self.environment
+    }
+
+    pub fn set_environment(&mut self, environment: EnvironmentSpec) {
+        self.environment = environment;
+    }
+
     pub(crate) fn validate(&self) -> Result<(), ProcessRecordValidationError> {
         if !self.key.project_path().is_absolute() {
             return Err(ProcessRecordValidationError::ProjectPath);
@@ -239,6 +274,9 @@ impl ProcessRecord {
         if self.executable.is_empty() {
             return Err(ProcessRecordValidationError::Executable);
         }
+        self.environment
+            .validate()
+            .map_err(|_| ProcessRecordValidationError::Environment)?;
         if !timestamps_are_ordered(self.created_at, self.started_at, self.exited_at) {
             return Err(ProcessRecordValidationError::Timestamps);
         }
@@ -436,4 +474,6 @@ pub enum ProcessRecordValidationError {
     TerminationSignal,
     #[error("non-killed record has a termination signal")]
     UnexpectedTerminationSignal,
+    #[error("record environment inputs are invalid")]
+    Environment,
 }

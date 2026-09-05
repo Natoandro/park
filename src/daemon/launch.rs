@@ -6,6 +6,7 @@ use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
 use tokio::process::{Child, Command};
 
+use crate::environment::ResolvedEnvironment;
 use crate::ipc::{IpcResponse, record_value};
 use crate::process::{ProcessKey, ProcessRecord, validate_process_name};
 use crate::project::ProjectPath;
@@ -19,6 +20,7 @@ pub(super) async fn start(
     project_path: ProjectPath,
     name: OsString,
     command: Vec<OsString>,
+    environment: crate::environment::EnvironmentSpec,
 ) -> IpcResponse {
     if let Err(error) = validate_process_name(&name) {
         return IpcResponse::error(request_id, ResultStatus::Failure, error.to_string());
@@ -50,13 +52,14 @@ pub(super) async fn start(
         }
     };
     let working_directory = project_path.as_path().to_path_buf();
-    let record = ProcessRecord::new(
+    let record = ProcessRecord::new_with_environment(
         key.clone(),
         working_directory.clone(),
         executable.clone(),
         arguments.clone(),
         epoch_seconds(),
         logs,
+        environment,
     );
     if let Err(error) = state.storage.create_record(&record) {
         if matches!(state.storage.load_record(&key), Ok(Some(_))) {
@@ -72,26 +75,51 @@ pub(super) async fn start(
 pub(super) async fn spawn_record(
     state: &DaemonState,
     request_id: u64,
+    record: ProcessRecord,
+) -> IpcResponse {
+    spawn_record_with_previous(state, request_id, record, None).await
+}
+
+pub(super) async fn spawn_record_with_previous(
+    state: &DaemonState,
+    request_id: u64,
     mut record: ProcessRecord,
+    previous_environment: Option<crate::environment::EnvironmentSpec>,
 ) -> IpcResponse {
     let key = record.key().clone();
-    let mut child = match validate_executable(record.executable()).and_then(|_| {
-        spawn_child(
-            record.working_directory(),
-            record.executable(),
-            record.arguments(),
-        )
-    }) {
-        Ok(child) => child,
+    let resolved = match record.environment().resolve(record.working_directory()) {
+        Ok(environment) => environment,
         Err(error) => {
             return persist_start_failure(
                 &state.storage,
                 request_id,
                 &mut record,
-                format!("could not spawn command: {error}"),
+                format!("could not resolve process environment: {error}"),
+                previous_environment.as_ref(),
             );
         }
     };
+    let mut child =
+        match validate_executable(record.working_directory(), record.executable(), &resolved)
+            .and_then(|_| {
+                spawn_child(
+                    record.working_directory(),
+                    record.executable(),
+                    record.arguments(),
+                    &resolved,
+                )
+            }) {
+            Ok(child) => child,
+            Err(error) => {
+                return persist_start_failure(
+                    &state.storage,
+                    request_id,
+                    &mut record,
+                    format!("could not spawn command: {error}"),
+                    previous_environment.as_ref(),
+                );
+            }
+        };
     let Some(pid) = child.id() else {
         let _ = child.kill().await;
         return persist_start_failure(
@@ -99,6 +127,7 @@ pub(super) async fn spawn_record(
             request_id,
             &mut record,
             "spawned child did not provide a process ID",
+            previous_environment.as_ref(),
         );
     };
     let stdout = match child.stdout.take() {
@@ -110,6 +139,7 @@ pub(super) async fn spawn_record(
                 &mut child,
                 &mut record,
                 "child stdout pipe was unavailable",
+                previous_environment.as_ref(),
             )
             .await;
         }
@@ -123,6 +153,7 @@ pub(super) async fn spawn_record(
                 &mut child,
                 &mut record,
                 "child stderr pipe was unavailable",
+                previous_environment.as_ref(),
             )
             .await;
         }
@@ -137,6 +168,7 @@ pub(super) async fn spawn_record(
                 &mut child,
                 &mut record,
                 &format!("could not establish process identity: {error}"),
+                previous_environment.as_ref(),
             )
             .await;
         }
@@ -149,6 +181,7 @@ pub(super) async fn spawn_record(
             &mut child,
             &mut record,
             "spawned child did not establish its own session and process group",
+            previous_environment.as_ref(),
         )
         .await;
     }
@@ -163,6 +196,7 @@ pub(super) async fn spawn_record(
             request_id,
             &mut record,
             format!("could not mark process running: {error}"),
+            previous_environment.as_ref(),
         );
     }
     if let Err(error) = state.storage.save_record(&record) {
@@ -170,6 +204,9 @@ pub(super) async fn spawn_record(
         let _ = child.kill().await;
         let reason = format!("could not persist running process: {error}");
         let _ = record.mark_spawn_failed(epoch_seconds(), reason.clone());
+        if let Some(environment) = previous_environment {
+            record.set_environment(environment.clone());
+        }
         let _ = state.storage.save_record(&record);
         return IpcResponse::error(request_id, ResultStatus::Failure, reason);
     }
@@ -210,15 +247,35 @@ fn create_logs_for_launch(
     }
 }
 
-fn validate_executable(executable: &std::ffi::OsStr) -> io::Result<()> {
+fn validate_executable(
+    working_directory: &Path,
+    executable: &std::ffi::OsStr,
+    environment: &ResolvedEnvironment,
+) -> io::Result<()> {
     let path = Path::new(executable);
     if path.components().count() > 1 {
-        return validate_executable_path(path);
+        let path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            working_directory.join(path)
+        };
+        return validate_executable_path(&path);
     }
-    let search_path = std::env::var_os("PATH")
+    let search_path = environment
+        .entries()
+        .iter()
+        .find(|entry| entry.key == "PATH")
+        .map(|entry| entry.value.clone())
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "PATH is not set"))?;
     let path = std::env::split_paths(&search_path)
         .map(|directory| directory.join(path))
+        .map(|candidate| {
+            if candidate.is_absolute() {
+                candidate
+            } else {
+                working_directory.join(candidate)
+            }
+        })
         .find(|candidate| validate_executable_path(candidate).is_ok())
         .ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, "executable was not found in PATH")
@@ -252,6 +309,7 @@ fn spawn_child(
     working_directory: &Path,
     executable: &std::ffi::OsStr,
     arguments: &[OsString],
+    environment: &ResolvedEnvironment,
 ) -> io::Result<Child> {
     #[cfg(target_os = "linux")]
     let mut command = {
@@ -276,6 +334,7 @@ fn spawn_child(
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+    environment.apply_to_command(&mut command);
 
     #[cfg(unix)]
     {
@@ -297,12 +356,13 @@ async fn fail_after_spawn(
     child: &mut Child,
     record: &mut ProcessRecord,
     reason: &str,
+    previous_environment: Option<&crate::environment::EnvironmentSpec>,
 ) -> IpcResponse {
     if let Some(pid) = child.id() {
         let _ = kill_process_group(pid);
     }
     let _ = child.kill().await;
-    persist_start_failure(storage, request_id, record, reason)
+    persist_start_failure(storage, request_id, record, reason, previous_environment)
 }
 
 fn persist_start_failure(
@@ -310,12 +370,18 @@ fn persist_start_failure(
     request_id: u64,
     record: &mut ProcessRecord,
     reason: impl Into<String>,
+    previous_environment: Option<&crate::environment::EnvironmentSpec>,
 ) -> IpcResponse {
     let reason = reason.into();
     let result = match record.mark_spawn_failed(epoch_seconds(), reason.clone()) {
-        Ok(()) => storage
-            .save_record(record)
-            .map_err(|error| error.to_string()),
+        Ok(()) => {
+            if let Some(environment) = previous_environment {
+                record.set_environment(environment.clone());
+            }
+            storage
+                .save_record(record)
+                .map_err(|error| error.to_string())
+        }
         Err(error) => Err(error.to_string()),
     };
     match result {

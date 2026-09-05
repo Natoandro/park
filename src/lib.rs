@@ -2,6 +2,7 @@ mod cli;
 mod client;
 mod config;
 mod daemon;
+mod environment;
 mod help;
 mod ipc;
 mod lifecycle;
@@ -12,7 +13,10 @@ mod registry;
 mod result;
 mod storage;
 
-pub use cli::{DaemonOperation, Invocation, LogsArgs, Operation, WaitArgs, parse_invocation};
+pub use cli::{
+    DaemonOperation, EnvArgs, Invocation, LogsArgs, Operation, RestartArgs, StartArgs, WaitArgs,
+    parse_invocation,
+};
 pub use client::{ClientError, request_with_daemon_start, stream_request_with_daemon_start};
 pub use config::{
     ActiveProcessPolicy, Config, ConfigError, DaemonConfig, ManagedProcessesConfig, ReexecConfig,
@@ -30,12 +34,17 @@ pub use daemon::{
     DaemonError, DaemonPhase, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT,
     run as run_daemon,
 };
+pub use environment::{
+    EnvironmentCapture, EnvironmentEntry, EnvironmentError, EnvironmentOverride, EnvironmentSpec,
+    ResolvedEnvironment,
+};
 pub use help::{command_help_result, skills_help_result};
 pub use ipc::{
-    IpcError, IpcLogOptions, IpcOperation, IpcRequest, IpcResponse, request_for_clean,
-    request_for_daemon_config, request_for_daemon_status, request_for_launch, request_for_logs,
-    request_for_ps, request_for_reexec, request_for_remove, request_for_restart,
-    request_for_signal, request_for_start, request_for_status, request_for_stop, request_for_wait,
+    IpcError, IpcLogOptions, IpcOperation, IpcRequest, IpcResponse, RecaptureEnvironment,
+    request_for_clean, request_for_daemon_config, request_for_daemon_status, request_for_env,
+    request_for_launch, request_for_logs, request_for_ps, request_for_reexec, request_for_remove,
+    request_for_restart, request_for_signal, request_for_start, request_for_status,
+    request_for_stop, request_for_wait,
 };
 pub use lifecycle::{
     InvalidLifecycleAction, InvalidStateTransition, LifecycleAction, ProcessState,

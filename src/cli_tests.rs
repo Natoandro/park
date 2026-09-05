@@ -10,6 +10,7 @@ fn parses_short_launch_and_preserves_command_arguments() {
         parse(&["park", "dev", "--", "cargo", "run", "--release"]),
         Invocation::Launch {
             name: "dev".into(),
+            env_files: vec![],
             command: vec!["cargo".into(), "run".into(), "--release".into()],
         }
     );
@@ -21,6 +22,7 @@ fn parses_operation_word_as_a_name_when_launch_separator_follows() {
         parse(&["park", "status", "--", "./server"]),
         Invocation::Launch {
             name: "status".into(),
+            env_files: vec![],
             command: vec!["./server".into()],
         }
     );
@@ -32,6 +34,7 @@ fn parses_command_arguments_that_begin_with_a_dash() {
         parse(&["park", "dev", "--", "-custom-command", "--flag"]),
         Invocation::Launch {
             name: "dev".into(),
+            env_files: vec![],
             command: vec!["-custom-command".into(), "--flag".into()],
         }
     );
@@ -43,6 +46,7 @@ fn parses_a_dash_prefixed_name() {
         parse(&["park", "-status", "--", "./server"]),
         Invocation::Launch {
             name: "-status".into(),
+            env_files: vec![],
             command: vec!["./server".into()],
         }
     );
@@ -54,6 +58,7 @@ fn accepts_colons_in_launch_names() {
         parse(&["park", "api:dev", "--", "./server"]),
         Invocation::Launch {
             name: "api:dev".into(),
+            env_files: vec![],
             command: vec!["./server".into()],
         }
     );
@@ -147,6 +152,7 @@ fn distinguishes_a_long_operation_alias_from_a_dash_prefixed_name() {
         parse(&["park", "--status", "--", "./server"]),
         Invocation::Launch {
             name: "--status".into(),
+            env_files: vec![],
             command: vec!["./server".into()],
         }
     );
@@ -158,6 +164,7 @@ fn parses_explicit_run_alias() {
         parse(&["park", "run", "dev", "--", "cargo", "run"]),
         Invocation::Launch {
             name: "dev".into(),
+            env_files: vec![],
             command: vec!["cargo".into(), "run".into()],
         }
     );
@@ -191,6 +198,60 @@ fn parses_wait_conditions_and_durations() {
             match_text: Some("ready".to_owned()),
             exit: false,
             timeout: Some(2_000),
+        }))
+    );
+}
+
+#[test]
+fn parses_environment_inputs_and_lifecycle_variants() {
+    assert_eq!(
+        parse(&["park", "dev", "--env-file", ".env", "--", "./server"]),
+        Invocation::Launch {
+            name: "dev".into(),
+            env_files: vec![".env".into()],
+            command: vec!["./server".into()],
+        }
+    );
+    assert_eq!(
+        parse(&[
+            "park",
+            "restart",
+            "dev",
+            "--recapture-env",
+            "--env-file",
+            ".env.local",
+        ]),
+        Invocation::Operation(Operation::Restart(RestartArgs {
+            name: "dev".into(),
+            recapture_env: true,
+            env_files: vec![".env.local".into()],
+        }))
+    );
+    assert_eq!(
+        parse(&[
+            "park",
+            "start",
+            "dev",
+            "--env-file",
+            ".env",
+            "--",
+            "./server",
+        ]),
+        Invocation::Operation(Operation::Start(StartArgs {
+            name: "dev".into(),
+            env_files: vec![".env".into()],
+            command: vec!["./server".into()],
+        }))
+    );
+    assert_eq!(
+        parse(&[
+            "park", "env", "dev", "--set", "A=B", "--unset", "C", "--json"
+        ]),
+        Invocation::Operation(Operation::Env(EnvArgs {
+            name: "dev".into(),
+            set: vec!["A=B".into()],
+            unset: vec!["C".into()],
+            json: true,
         }))
     );
 }

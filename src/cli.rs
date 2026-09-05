@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 
-use clap::{ArgGroup, Args, CommandFactory, Parser, Subcommand};
+use clap::{ArgAction, ArgGroup, Args, CommandFactory, Parser, Subcommand};
 use std::num::ParseIntError;
 
 use crate::lifecycle::ProcessState;
@@ -11,6 +11,7 @@ use crate::process::validate_process_name;
 pub enum Invocation {
     Launch {
         name: OsString,
+        env_files: Vec<OsString>,
         command: Vec<OsString>,
     },
     Operation(Operation),
@@ -31,12 +32,13 @@ pub enum Operation {
     Status { name: OsString, json: bool },
     Logs(LogsArgs),
     Stop { name: OsString, force: bool },
-    Restart { name: OsString },
-    Start { name: OsString },
+    Restart(RestartArgs),
+    Start(StartArgs),
     Signal { name: OsString, signal: String },
     Rm { name: OsString, keep_logs: bool },
     Clean,
     Wait(WaitArgs),
+    Env(EnvArgs),
     Daemon(DaemonOperation),
     Help,
     HelpSkills { json: bool },
@@ -47,6 +49,7 @@ impl Operation {
         match self {
             Self::Ps { json } | Self::Status { json, .. } => *json,
             Self::Logs(args) => args.json,
+            Self::Env(args) => args.json,
             Self::Daemon(operation) => operation.requests_json(),
             Self::HelpSkills { json } => *json,
             _ => false,
@@ -91,6 +94,28 @@ pub struct WaitArgs {
     pub timeout: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestartArgs {
+    pub name: OsString,
+    pub recapture_env: bool,
+    pub env_files: Vec<OsString>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartArgs {
+    pub name: OsString,
+    pub env_files: Vec<OsString>,
+    pub command: Vec<OsString>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnvArgs {
+    pub name: OsString,
+    pub set: Vec<OsString>,
+    pub unset: Vec<OsString>,
+    pub json: bool,
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "park",
@@ -105,6 +130,9 @@ struct LaunchCli {
         help = "Name for the retained process record"
     )]
     name: OsString,
+
+    #[arg(long = "env-file", value_name = "PATH", action = ArgAction::Append, help = "Read this dotenv file when spawning")]
+    env_files: Vec<OsString>,
 
     #[arg(
         last = true,
@@ -129,6 +157,9 @@ struct RunCli {
         help = "Name for the retained process record"
     )]
     name: OsString,
+
+    #[arg(long = "env-file", value_name = "PATH", action = ArgAction::Append, help = "Read this dotenv file when spawning")]
+    env_files: Vec<OsString>,
 
     #[arg(
         last = true,
@@ -195,6 +226,10 @@ enum OperationCliCommand {
     Restart {
         #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
         name: OsString,
+        #[arg(long, help = "Replace the stored client environment capture")]
+        recapture_env: bool,
+        #[arg(long = "env-file", value_name = "PATH", requires = "recapture_env", action = ArgAction::Append, help = "Replace the stored dotenv file list")]
+        env_files: Vec<OsString>,
     },
     #[command(
         name = "start",
@@ -204,6 +239,14 @@ enum OperationCliCommand {
     Start {
         #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
         name: OsString,
+        #[arg(long = "env-file", value_name = "PATH", action = ArgAction::Append, help = "Read this dotenv file when creating a record")]
+        env_files: Vec<OsString>,
+        #[arg(
+            last = true,
+            value_name = "COMMAND",
+            help = "Create a record with this command after `--`"
+        )]
+        command: Vec<OsString>,
     },
     #[command(
         name = "signal",
@@ -242,6 +285,21 @@ enum OperationCliCommand {
         after_help = "Choose exactly one of --state, --match, or --exit.\n--timeout accepts a non-negative duration ending in ms, s, or m."
     )]
     Wait(WaitCliArgs),
+    #[command(
+        name = "env",
+        about = "Inspect or update a record environment",
+        after_help = "Environment values are shown only by this command and apply to future starts."
+    )]
+    Env {
+        #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
+        name: OsString,
+        #[arg(long = "set", value_name = "KEY=VALUE", action = ArgAction::Append, help = "Set an explicit environment value")]
+        set: Vec<OsString>,
+        #[arg(long = "unset", value_name = "KEY", action = ArgAction::Append, help = "Remove an explicit environment value")]
+        unset: Vec<OsString>,
+        #[arg(long, help = "Render machine-readable JSON")]
+        json: bool,
+    },
     #[command(
         name = "daemon",
         about = "Manage the per-user Park daemon",
@@ -390,11 +448,16 @@ where
 {
     let args: Vec<OsString> = args.into_iter().map(Into::into).collect();
 
-    if args.get(2).is_some_and(|arg| arg == "--") {
+    if args.get(1).is_none_or(|arg| arg != "run")
+        && args
+            .get(2)
+            .is_some_and(|arg| arg == "--" || arg == "--env-file")
+    {
         let parsed = LaunchCli::try_parse_from(args)?;
         validate_launch_name(&parsed.name)?;
         return Ok(Invocation::Launch {
             name: parsed.name,
+            env_files: parsed.env_files,
             command: parsed.command,
         });
     }
@@ -406,6 +469,7 @@ where
         validate_launch_name(&parsed.name)?;
         return Ok(Invocation::Launch {
             name: parsed.name,
+            env_files: parsed.env_files,
             command: parsed.command,
         });
     }
@@ -415,6 +479,15 @@ where
     let parsed = OperationCli::try_parse_from(operation_args)?;
     let operation = parsed.operation.into();
     validate_operation_name(&operation)?;
+    if let Operation::Start(args) = &operation
+        && args.command.is_empty()
+        && !args.env_files.is_empty()
+    {
+        return Err(clap::Error::raw(
+            clap::error::ErrorKind::MissingRequiredArgument,
+            "--env-file requires a command when creating a new record",
+        ));
+    }
     Ok(Invocation::Operation(operation))
 }
 
@@ -428,11 +501,12 @@ fn validate_operation_name(operation: &Operation) -> Result<(), clap::Error> {
         Operation::Status { name, .. }
         | Operation::Logs(LogsArgs { name, .. })
         | Operation::Stop { name, .. }
-        | Operation::Restart { name }
-        | Operation::Start { name }
+        | Operation::Restart(RestartArgs { name, .. })
+        | Operation::Start(StartArgs { name, .. })
         | Operation::Signal { name, .. }
         | Operation::Rm { name, .. }
-        | Operation::Wait(WaitArgs { name, .. }) => Some(name),
+        | Operation::Wait(WaitArgs { name, .. })
+        | Operation::Env(EnvArgs { name, .. }) => Some(name),
         Operation::Ps { .. }
         | Operation::Clean
         | Operation::Daemon(_)
@@ -482,8 +556,24 @@ impl From<OperationCliCommand> for Operation {
                 json: args.json,
             }),
             OperationCliCommand::Stop { name, force } => Self::Stop { name, force },
-            OperationCliCommand::Restart { name } => Self::Restart { name },
-            OperationCliCommand::Start { name } => Self::Start { name },
+            OperationCliCommand::Restart {
+                name,
+                recapture_env,
+                env_files,
+            } => Self::Restart(RestartArgs {
+                name,
+                recapture_env,
+                env_files,
+            }),
+            OperationCliCommand::Start {
+                name,
+                env_files,
+                command,
+            } => Self::Start(StartArgs {
+                name,
+                env_files,
+                command,
+            }),
             OperationCliCommand::Signal { name, signal } => Self::Signal { name, signal },
             OperationCliCommand::Rm { name, keep_logs } => Self::Rm { name, keep_logs },
             OperationCliCommand::Clean => Self::Clean,
@@ -493,6 +583,17 @@ impl From<OperationCliCommand> for Operation {
                 match_text: args.match_text,
                 exit: args.exit,
                 timeout: args.timeout,
+            }),
+            OperationCliCommand::Env {
+                name,
+                set,
+                unset,
+                json,
+            } => Self::Env(EnvArgs {
+                name,
+                set,
+                unset,
+                json,
             }),
             OperationCliCommand::Daemon { operation } => Self::Daemon(match operation {
                 DaemonCliCommand::Status { json } => DaemonOperation::Status { json },

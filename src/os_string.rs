@@ -51,6 +51,77 @@ pub(crate) mod vec {
     }
 }
 
+pub(crate) mod option {
+    use super::*;
+
+    pub(crate) fn serialize<S>(value: &Option<OsString>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        value
+            .as_ref()
+            .map(|value| encode_hex(value.as_bytes()))
+            .serialize(serializer)
+    }
+
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Option<OsString>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<String>::deserialize(deserializer)?
+            .map(|value| {
+                decode_hex(&value)
+                    .map(OsString::from_vec)
+                    .map_err(serde::de::Error::custom)
+            })
+            .transpose()
+    }
+}
+
+pub(crate) mod vec_option {
+    use super::*;
+
+    pub(crate) fn serialize<S>(
+        value: &Option<Vec<OsString>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        value
+            .as_ref()
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|value| encode_hex(value.as_bytes()))
+                    .collect::<Vec<_>>()
+            })
+            .serialize(serializer)
+    }
+
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<OsString>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<Vec<String>>::deserialize(deserializer)?
+            .map(|values| {
+                values
+                    .into_iter()
+                    .map(|value| {
+                        decode_hex(&value)
+                            .map(OsString::from_vec)
+                            .map_err(serde::de::Error::custom)
+                    })
+                    .collect()
+            })
+            .transpose()
+    }
+}
+
+pub(crate) fn encode_for_display(value: &OsString) -> String {
+    String::from_utf8_lossy(value.as_bytes()).into_owned()
+}
+
 fn encode_hex(bytes: &[u8]) -> String {
     let mut encoded = String::with_capacity(bytes.len() * 2);
     for byte in bytes {

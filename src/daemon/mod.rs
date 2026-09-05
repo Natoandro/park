@@ -310,8 +310,9 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
             project_path,
             name,
             command,
+            environment,
         } => DispatchResponse::Single(
-            launch::start(state, request_id, project_path, name, command).await,
+            launch::start(state, request_id, project_path, name, command, environment).await,
         ),
         IpcOperation::Logs {
             key,
@@ -353,6 +354,7 @@ async fn dispatch_request(state: &DaemonState, request: IpcRequest) -> DispatchR
         | IpcOperation::Signal { .. }
         | IpcOperation::Restart { .. }
         | IpcOperation::Start { .. }
+        | IpcOperation::Env { .. }
         | IpcOperation::Remove { .. }
         | IpcOperation::Clean) => {
             DispatchResponse::Single(control::handle(state, request_id, operation).await)
@@ -376,8 +378,9 @@ fn operation_name(operation: &IpcOperation) -> Option<&OsStr> {
         | IpcOperation::Wait { key, .. }
         | IpcOperation::Stop { key, .. }
         | IpcOperation::Signal { key, .. }
-        | IpcOperation::Restart { key }
-        | IpcOperation::Start { key }
+        | IpcOperation::Restart { key, .. }
+        | IpcOperation::Start { key, .. }
+        | IpcOperation::Env { key, .. }
         | IpcOperation::Remove { key, .. } => Some(key.name()),
         IpcOperation::Ping
         | IpcOperation::DaemonStatus
@@ -402,10 +405,12 @@ fn canonicalize_operation(
             project_path,
             name,
             command,
+            environment,
         } => Ok(IpcOperation::Launch {
             project_path: resolve_project(project_path.as_path())?,
             name,
             command,
+            environment,
         }),
         IpcOperation::Ps { project_path } => Ok(IpcOperation::Ps {
             project_path: resolve_project(project_path.as_path())?,
@@ -457,11 +462,18 @@ fn canonicalize_operation(
             key: canonical_key(key)?,
             signal,
         }),
-        IpcOperation::Restart { key } => Ok(IpcOperation::Restart {
+        IpcOperation::Restart { key, recapture } => Ok(IpcOperation::Restart {
             key: canonical_key(key)?,
+            recapture,
         }),
-        IpcOperation::Start { key } => Ok(IpcOperation::Start {
+        IpcOperation::Start {
+            key,
+            command,
+            environment,
+        } => Ok(IpcOperation::Start {
             key: canonical_key(key)?,
+            command,
+            environment,
         }),
         IpcOperation::Remove { key, keep_logs } => Ok(IpcOperation::Remove {
             key: canonical_key(key)?,
@@ -478,6 +490,11 @@ fn canonicalize_operation(
             candidate_version,
         }),
         IpcOperation::Clean => Ok(IpcOperation::Clean),
+        IpcOperation::Env { key, set, unset } => Ok(IpcOperation::Env {
+            key: canonical_key(key)?,
+            set,
+            unset,
+        }),
     }
 }
 
@@ -576,6 +593,7 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
         | IpcOperation::Signal { .. }
         | IpcOperation::Restart { .. }
         | IpcOperation::Start { .. }
+        | IpcOperation::Env { .. }
         | IpcOperation::Remove { .. }
         | IpcOperation::Clean => IpcResponse::error(
             request.request_id,

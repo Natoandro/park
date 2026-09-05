@@ -28,6 +28,9 @@ pub fn human_result(result: &CommandResult<Value>) -> String {
     if is_process_record(data) {
         return human_process_record(data);
     }
+    if data.get("variables").is_some() {
+        return human_environment(data);
+    }
     if data.get("reexec_state").is_some() {
         return daemon::human_status(data);
     }
@@ -160,6 +163,18 @@ fn human_process_record(record: &Value) -> String {
     }
     if let Some(signal) = record.get("termination_signal").and_then(Value::as_i64) {
         let _ = writeln!(output, "Termination signal: {signal}");
+    }
+    output
+}
+
+fn human_environment(data: &Value) -> String {
+    let mut output = String::new();
+    if let Some(variables) = data.get("variables").and_then(Value::as_array) {
+        for variable in variables {
+            let key = variable.get("key").and_then(Value::as_str).unwrap_or("?");
+            let value = variable.get("value").and_then(Value::as_str).unwrap_or("");
+            let _ = writeln!(output, "{key}={value}");
+        }
     }
     output
 }
