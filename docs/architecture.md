@@ -49,7 +49,7 @@ Stopping is graceful by default: send SIGTERM to the managed process group, wait
 
 - The short start form is `park <name> [--env-file <path>]... -- <command> [arguments...]`; `run` may be an alias but is not required for normal use.
 - `start <name> -- <command>...` creates a new record when the complete key is unused; `start <name>` relaunches a retained terminal record.
-- `status` and lifecycle commands resolve only within the current project's canonical path. `ps` defaults to that exact path and has a planned explicit scope for subtree or global inspection.
+- `status` and lifecycle commands resolve only within the current project's canonical path. `ps` defaults to that exact path and supports explicit subtree or global inspection.
 - Logs stay available after a command exits. Standard output and standard error are retained independently and can also be presented together in deterministic stdout-then-stderr order.
 - `--json` is a first-class output mode for process inspection and should use documented, stable fields.
 - `restart` reuses the recorded command and environment inputs, with `--recapture-env` as the explicit opt-in for a new client snapshot. `park env` inspects or updates explicit per-record environment values. `rm`/`clean` never remove an active process or its remaining process group.

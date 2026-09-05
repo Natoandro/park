@@ -193,7 +193,7 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
             };
             request_for_launch(1, project, name, command, environment)
         }
-        Invocation::Operation(Operation::Ps { .. }) => request_for_ps(1, project),
+        Invocation::Operation(Operation::Ps { scope, .. }) => request_for_ps(1, project, scope),
         Invocation::Operation(Operation::Status { name, .. }) => {
             request_for_status(1, park_cli::ProcessKey::new(project, name))
         }

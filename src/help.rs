@@ -20,7 +20,7 @@ pub fn command_help_result() -> CommandResult<Value> {
 }
 
 fn skills_guide() -> &'static str {
-    "Park AI agent integration\n\nInstall the canonical skill:\n  Project: npx skills add Natoandro/park --skill park\n  Global:  npx skills add Natoandro/park --skill park -g\n\nThe default install commands detect available agents and let you choose when\nneeded. To target one agent explicitly, add -a <agent>, for example:\n  npx skills add Natoandro/park --skill park -a opencode\n\nUse it once without installing (prints a prompt):\n  npx skills use Natoandro/park --skill park\n\nTo start a specific supported agent, add --agent <agent>.\n\nRecommended workflow:\n  1. Run from the project directory associated with the process.\n  2. Inspect records: park ps --json\n  3. Launch: park <name> [--env-file <path>]... -- <command> [arguments...]\n  4. Wait for running or readiness output with park wait.\n  5. Diagnose with park status <name> --json and park logs <name>.\n  6. Inspect or update future environment values with park env <name> --json.\n  7. Stop or remove only records belonging to the task.\n\nSkill maintenance:\n  npx skills update park\n  npx skills remove park\n"
+    "Park AI agent integration\n\nInstall the canonical skill:\n  Project: npx skills add Natoandro/park --skill park\n  Global:  npx skills add Natoandro/park --skill park -g\n\nThe default install commands detect available agents and let you choose when\nneeded. To target one agent explicitly, add -a <agent>, for example:\n  npx skills add Natoandro/park --skill park -a opencode\n\nUse it once without installing (prints a prompt):\n  npx skills use Natoandro/park --skill park\n\nTo start a specific supported agent, add --agent <agent>.\n\nRecommended workflow:\n  1. Run from the project directory associated with the process.\n  2. Inspect current records: park ps --json\n  3. Inspect descendants or all projects explicitly with park ps --scope subtree --json or park ps --scope global --json.\n  4. Launch: park <name> [--env-file <path>]... -- <command> [arguments...]\n  5. Wait for running or readiness output with park wait.\n  6. Diagnose with park status <name> --json and park logs <name>.\n  7. Inspect or update future environment values with park env <name> --json.\n  8. Stop or remove only records belonging to the task.\n\nSkill maintenance:\n  npx skills update park\n  npx skills remove park\n"
 }
 
 fn skills_data() -> Value {
@@ -34,7 +34,8 @@ fn skills_data() -> Value {
         },
         "workflow": [
             "Run from the project directory associated with the process.",
-            "Inspect records with park ps --json before choosing a name.",
+            "Inspect current records with park ps --json before choosing a name.",
+            "Use park ps --scope subtree or --scope global for explicit broader discovery.",
             "Launch with park <name> [--env-file <path>]... -- <command> [arguments...].",
             "Wait for running or a literal readiness message with park wait.",
             "Use park status <name> --json and park logs <name> to diagnose failures.",

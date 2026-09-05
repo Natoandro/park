@@ -145,7 +145,7 @@ Phase 5 implementation decisions:
 ## Phase 6: Inspection and Logs
 
 - [x] Implement `park ps` for the current project with deterministic ordering.
-- [ ] Add `park ps --scope <current|subtree|global>` with current as the default; keep separate `status` and lifecycle targeting exact-key only.
+- [x] Add `park ps --scope <current|subtree|global>` with current as the default; keep separate `status` and lifecycle targeting exact-key only.
 - [x] Implement `park status <name>` using persisted state and reconciled liveness.
 - [x] Implement matching JSON representations with documented stable field names.
 - [x] Implement combined `park logs <name>` plus independent `--stdout` and `--stderr` views.
@@ -157,8 +157,8 @@ Phase 5 implementation decisions:
 
 Phase 6 implementation decisions:
 
-- `ps` and `status` reconcile active records against verified process identity before reading them. `ps` sorts names by their ASCII bytes.
-- The planned `ps --scope` option is an enum rather than a set of boolean flags: `current` means the exact canonical current directory, `subtree` includes canonical project paths below it, and `global` includes every retained record in the user's state. Non-current human output includes the project path; JSON retains the complete project key. An `ancestors` scope is deferred.
+- `ps` and `status` reconcile active records against verified process identity before reading them. `ps` sorts by canonical project path and then name using byte ordering; the default current scope therefore retains deterministic name ordering.
+- The `ps --scope` option is an enum rather than a set of boolean flags: `current` means the exact canonical current directory, `subtree` includes canonical project paths below it, and `global` includes every retained record in the user's state. Non-current human output includes the project path; JSON retains the complete project key. An `ancestors` scope is deferred.
 - Log JSON data uses stable `stream`, `content`, and `state` fields. Content is returned as UTF-8 with replacement for invalid bytes; the durable files retain the original bytes.
 - Combined output is stdout followed by stderr. This is deterministic but does not claim to reconstruct cross-stream event timing.
 - `--grep` is a literal substring filter applied line-by-line before `--head` or `--tail`. Regex search is not yet implemented; adding it would require another dependency.

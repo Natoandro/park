@@ -82,6 +82,32 @@ fn parses_status_and_json() {
 }
 
 #[test]
+fn parses_process_listing_scopes() {
+    assert_eq!(
+        parse(&["park", "ps"]),
+        Invocation::Operation(Operation::Ps {
+            scope: PsScope::Current,
+            json: false,
+        })
+    );
+    assert_eq!(
+        parse(&["park", "ps", "--scope", "subtree", "--json"]),
+        Invocation::Operation(Operation::Ps {
+            scope: PsScope::Subtree,
+            json: true,
+        })
+    );
+    assert_eq!(
+        parse(&["park", "ps", "--scope", "global"]),
+        Invocation::Operation(Operation::Ps {
+            scope: PsScope::Global,
+            json: false,
+        })
+    );
+    assert!(parse_invocation(["park", "ps", "--scope", "invalid"]).is_err());
+}
+
+#[test]
 fn parses_daemon_management_commands() {
     assert_eq!(
         parse(&["park", "daemon", "status", "--json"]),

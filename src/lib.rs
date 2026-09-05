@@ -14,8 +14,8 @@ mod result;
 mod storage;
 
 pub use cli::{
-    DaemonOperation, EnvArgs, Invocation, LogsArgs, Operation, RestartArgs, StartArgs, WaitArgs,
-    parse_invocation,
+    DaemonOperation, EnvArgs, Invocation, LogsArgs, Operation, PsScope, RestartArgs, StartArgs,
+    WaitArgs, parse_invocation,
 };
 pub use client::{ClientError, request_with_daemon_start, stream_request_with_daemon_start};
 pub use config::{

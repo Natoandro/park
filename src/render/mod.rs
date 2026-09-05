@@ -23,7 +23,10 @@ pub fn human_result(result: &CommandResult<Value>) -> String {
         return content.to_owned();
     }
     if let Some(records) = data.as_array() {
-        return human_process_list(records);
+        return human_process_list(records, false);
+    }
+    if let Some(records) = data.get("records").and_then(Value::as_array) {
+        return human_process_list(records, true);
     }
     if is_process_record(data) {
         return human_process_record(data);
@@ -98,9 +101,12 @@ fn decode_hex(value: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-fn human_process_list(records: &[Value]) -> String {
+fn human_process_list(records: &[Value], include_project: bool) -> String {
     if records.is_empty() {
         return "No process records.\n".to_owned();
+    }
+    if include_project {
+        return human_scoped_process_list(records);
     }
     let rows = records.iter().map(process_row).collect::<Vec<_>>();
     let name_width = rows.iter().map(|row| row.0.len()).max().unwrap_or(0).max(4);
@@ -114,6 +120,37 @@ fn human_process_list(records: &[Value]) -> String {
         let _ = writeln!(
             output,
             "{name:<name_width$}  {state:<state_width$}  {pid:>pid_width$}  {command}"
+        );
+    }
+    output
+}
+
+fn human_scoped_process_list(records: &[Value]) -> String {
+    let rows = records
+        .iter()
+        .map(|record| {
+            let (name, state, pid, command) = process_row(record);
+            let project = record
+                .get("key")
+                .and_then(|key| key.get("project_path"))
+                .and_then(Value::as_str)
+                .unwrap_or("?")
+                .to_owned();
+            (project, name, state, pid, command)
+        })
+        .collect::<Vec<_>>();
+    let project_width = rows.iter().map(|row| row.0.len()).max().unwrap_or(0).max(7);
+    let name_width = rows.iter().map(|row| row.1.len()).max().unwrap_or(0).max(4);
+    let state_width = rows.iter().map(|row| row.2.len()).max().unwrap_or(0).max(5);
+    let pid_width = rows.iter().map(|row| row.3.len()).max().unwrap_or(0).max(3);
+    let mut output = format!(
+        "{:<project_width$}  {:<name_width$}  {:<state_width$}  {:>pid_width$}  COMMAND\n",
+        "PROJECT", "NAME", "STATE", "PID"
+    );
+    for (project, name, state, pid, command) in rows {
+        let _ = writeln!(
+            output,
+            "{project:<project_width$}  {name:<name_width$}  {state:<state_width$}  {pid:>pid_width$}  {command}"
         );
     }
     output
@@ -264,5 +301,25 @@ mod tests {
         assert!(output.contains("dev"));
         assert!(output.contains("/bin/sh -c echo"));
         assert!(!output.trim_start().starts_with('{'));
+    }
+
+    #[test]
+    fn renders_scoped_process_lists_with_project_paths() {
+        let result = result(json!({
+            "scope": "subtree",
+            "records": [{
+                "key": {"name": "646576", "project_path": "/tmp/project"},
+                "executable": "2f62696e2f7368",
+                "arguments": [],
+                "pid": 42,
+                "state": "running"
+            }]
+        }));
+        let mut decoded = result;
+        decode_json_result(&mut decoded);
+        let output = human_result(&decoded);
+        assert!(output.starts_with("PROJECT"));
+        assert!(output.contains("/tmp/project"));
+        assert!(output.contains("dev"));
     }
 }

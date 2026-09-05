@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
@@ -12,6 +13,7 @@ use thiserror::Error;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::time::{Duration, timeout};
 
+use crate::cli::PsScope;
 use crate::config::{ConfigSource, LoadedConfig};
 use crate::ipc::{
     IpcError, IpcOperation, IpcRequest, IpcResponse, PROTOCOL_VERSION, read_request, record_value,
@@ -412,8 +414,12 @@ fn canonicalize_operation(
             command,
             environment,
         }),
-        IpcOperation::Ps { project_path } => Ok(IpcOperation::Ps {
+        IpcOperation::Ps {
+            project_path,
+            scope,
+        } => Ok(IpcOperation::Ps {
             project_path: resolve_project(project_path.as_path())?,
+            scope,
         }),
         IpcOperation::Status { key } => Ok(IpcOperation::Status {
             key: ProcessKey::new(
@@ -545,36 +551,10 @@ fn handle_request(storage: &Storage, request: IpcRequest) -> IpcResponse {
             ResultStatus::Failure,
             "wait requests require the daemon dispatcher",
         ),
-        IpcOperation::Ps { project_path } => {
-            let records = match storage.list_records() {
-                Ok(records) => records
-                    .into_iter()
-                    .filter(|record| record.key().project_path() == project_path.as_path())
-                    .collect::<Vec<_>>(),
-                Err(error) => return storage_error(request.request_id, error),
-            };
-            let mut records = records;
-            records.sort_by(|left, right| {
-                use std::os::unix::ffi::OsStrExt;
-
-                left.key()
-                    .name()
-                    .as_bytes()
-                    .cmp(right.key().name().as_bytes())
-            });
-            let values = records
-                .iter()
-                .map(record_value)
-                .collect::<Result<Vec<_>, _>>();
-            match values {
-                Ok(values) => {
-                    IpcResponse::success(request.request_id, Some(serde_json::Value::Array(values)))
-                }
-                Err(error) => {
-                    IpcResponse::error(request.request_id, ResultStatus::Failure, error.to_string())
-                }
-            }
-        }
+        IpcOperation::Ps {
+            project_path,
+            scope,
+        } => ps_response(storage, request.request_id, project_path, scope),
         IpcOperation::Status { key } => match storage.load_record(&key) {
             Ok(Some(record)) => match record_value(&record) {
                 Ok(value) => IpcResponse::success(request.request_id, Some(value)),
@@ -623,6 +603,60 @@ fn daemon_status(storage: &Storage, request_id: u64) -> IpcResponse {
             "active_record_count": active_record_count,
         })),
     )
+}
+
+fn ps_response(
+    storage: &Storage,
+    request_id: u64,
+    project_path: crate::project::ProjectPath,
+    scope: PsScope,
+) -> IpcResponse {
+    let mut records = match storage.list_records() {
+        Ok(records) => records
+            .into_iter()
+            .filter(|record| match scope {
+                PsScope::Current => record.key().project_path() == project_path.as_path(),
+                PsScope::Subtree => record
+                    .key()
+                    .project_path()
+                    .starts_with(project_path.as_path()),
+                PsScope::Global => true,
+            })
+            .collect::<Vec<_>>(),
+        Err(error) => return storage_error(request_id, error),
+    };
+    records.sort_by(|left, right| {
+        left.key()
+            .project_path()
+            .as_os_str()
+            .as_bytes()
+            .cmp(right.key().project_path().as_os_str().as_bytes())
+            .then_with(|| {
+                left.key()
+                    .name()
+                    .as_bytes()
+                    .cmp(right.key().name().as_bytes())
+            })
+    });
+    let values = match records
+        .iter()
+        .map(record_value)
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(values) => values,
+        Err(error) => {
+            return IpcResponse::error(request_id, ResultStatus::Failure, error.to_string());
+        }
+    };
+    let data = if scope == PsScope::Current {
+        serde_json::Value::Array(values)
+    } else {
+        serde_json::json!({
+            "scope": scope.as_str(),
+            "records": values,
+        })
+    };
+    IpcResponse::success(request_id, Some(data))
 }
 
 fn daemon_config(request_id: u64) -> IpcResponse {

@@ -1,6 +1,8 @@
 use std::ffi::OsString;
 
+use clap::ValueEnum;
 use clap::{ArgAction, ArgGroup, Args, CommandFactory, Parser, Subcommand};
+use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 
 use crate::lifecycle::ProcessState;
@@ -28,7 +30,7 @@ impl Invocation {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operation {
-    Ps { json: bool },
+    Ps { scope: PsScope, json: bool },
     Status { name: OsString, json: bool },
     Logs(LogsArgs),
     Stop { name: OsString, force: bool },
@@ -44,10 +46,29 @@ pub enum Operation {
     HelpSkills { json: bool },
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum PsScope {
+    #[default]
+    Current,
+    Subtree,
+    Global,
+}
+
+impl PsScope {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::Subtree => "subtree",
+            Self::Global => "global",
+        }
+    }
+}
+
 impl Operation {
     fn requests_json(&self) -> bool {
         match self {
-            Self::Ps { json } | Self::Status { json, .. } => *json,
+            Self::Ps { json, .. } | Self::Status { json, .. } => *json,
             Self::Logs(args) => args.json,
             Self::Env(args) => args.json,
             Self::Daemon(operation) => operation.requests_json(),
@@ -189,8 +210,10 @@ pub(crate) fn command_help() -> String {
 
 #[derive(Debug, Subcommand)]
 enum OperationCliCommand {
-    #[command(name = "ps", about = "List records in the current project")]
+    #[command(name = "ps", about = "List records by project scope")]
     Ps {
+        #[arg(long, value_enum, default_value_t = PsScope::Current, help = "Listing scope: current, subtree, or global")]
+        scope: PsScope,
         #[arg(long, help = "Render machine-readable JSON")]
         json: bool,
     },
@@ -543,7 +566,7 @@ fn normalize_operation_alias(args: &mut [OsString]) {
 impl From<OperationCliCommand> for Operation {
     fn from(command: OperationCliCommand) -> Self {
         match command {
-            OperationCliCommand::Ps { json } => Self::Ps { json },
+            OperationCliCommand::Ps { scope, json } => Self::Ps { scope, json },
             OperationCliCommand::Status { name, json } => Self::Status { name, json },
             OperationCliCommand::Logs(args) => Self::Logs(LogsArgs {
                 name: args.name,

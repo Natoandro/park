@@ -7,6 +7,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 use tokio::time::{Duration, timeout};
 
+use crate::cli::PsScope;
 use crate::environment::{EnvironmentCapture, EnvironmentSpec};
 use crate::lifecycle::ProcessState;
 use crate::process::{ProcessKey, ProcessRecord};
@@ -47,6 +48,7 @@ pub enum IpcOperation {
     },
     Ps {
         project_path: ProjectPath,
+        scope: PsScope,
     },
     Status {
         key: ProcessKey,
@@ -340,8 +342,14 @@ pub async fn write_response(
         })
 }
 
-pub fn request_for_ps(request_id: u64, project_path: ProjectPath) -> IpcRequest {
-    IpcRequest::new(request_id, IpcOperation::Ps { project_path })
+pub fn request_for_ps(request_id: u64, project_path: ProjectPath, scope: PsScope) -> IpcRequest {
+    IpcRequest::new(
+        request_id,
+        IpcOperation::Ps {
+            project_path,
+            scope,
+        },
+    )
 }
 
 pub fn request_for_daemon_status(request_id: u64) -> IpcRequest {
@@ -663,7 +671,11 @@ mod tests {
 
     #[test]
     fn rejects_response_with_a_mismatched_version_or_request_id() {
-        let request = request_for_ps(7, ProjectPath::from_canonical("/project".into()));
+        let request = request_for_ps(
+            7,
+            ProjectPath::from_canonical("/project".into()),
+            PsScope::Current,
+        );
         let mut response = IpcResponse::success(7, None);
         response.version = PROTOCOL_VERSION + 1;
         assert!(matches!(

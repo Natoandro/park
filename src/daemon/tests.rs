@@ -167,6 +167,7 @@ fn ps_and_status_return_persisted_records() {
             1,
             IpcOperation::Ps {
                 project_path: project,
+                scope: crate::cli::PsScope::Current,
             },
         ),
     );
@@ -227,11 +228,12 @@ fn canonicalizes_daemon_project_paths_before_dispatch() {
 
     let operation = canonicalize_operation(IpcOperation::Ps {
         project_path: ProjectPath::from_canonical(alias),
+        scope: crate::cli::PsScope::Current,
     })
     .expect("alias should resolve");
     assert!(matches!(
         operation,
-        IpcOperation::Ps { project_path } if project_path.as_path() == fs::canonicalize(&project).expect("project should canonicalize")
+        IpcOperation::Ps { project_path, .. } if project_path.as_path() == fs::canonicalize(&project).expect("project should canonicalize")
     ));
     let _ = fs::remove_dir_all(root);
 }
@@ -241,6 +243,7 @@ fn rejects_invalid_daemon_project_paths() {
     assert!(
         canonicalize_operation(IpcOperation::Ps {
             project_path: ProjectPath::from_canonical("relative-project".into()),
+            scope: crate::cli::PsScope::Current,
         })
         .is_err()
     );

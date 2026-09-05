@@ -35,6 +35,17 @@ impl TestEnvironment {
         run_with_root(&self.root, args)
     }
 
+    fn run_from(&self, directory: &Path, args: &[&str]) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_park"))
+            .args(args)
+            .current_dir(directory)
+            .env("XDG_STATE_HOME", self.root.join("state"))
+            .env("XDG_RUNTIME_DIR", self.root.join("runtime"))
+            .env("XDG_CONFIG_HOME", self.root.join("config"))
+            .output()
+            .expect("park command should run")
+    }
+
     fn run_with_vars(&self, args: &[&str], vars: &[(&str, &str)]) -> Output {
         let mut command = Command::new(env!("CARGO_BIN_EXE_park"));
         command
@@ -163,6 +174,84 @@ fn starts_on_demand_and_reconnects_to_the_same_daemon() {
         String::from_utf8_lossy(&second.stdout).trim(),
         r#"{"status":"success","ok":true,"data":[]}"#
     );
+}
+
+#[test]
+fn lists_records_with_explicit_project_scopes() {
+    let environment = TestEnvironment::new();
+    let project = environment.root.join("project");
+    let nested = project.join("nested");
+    let sibling = environment.root.join("project-sibling");
+    fs::create_dir_all(&nested).expect("nested project should be created");
+    fs::create_dir(&sibling).expect("sibling project should be created");
+
+    for (directory, name) in [
+        (&project, "root"),
+        (&nested, "nested"),
+        (&sibling, "sibling"),
+    ] {
+        let launch = environment.run_from(directory, &[name, "--", "/bin/true"]);
+        assert!(launch.status.success(), "stderr: {:?}", launch.stderr);
+    }
+
+    let current = environment.run_from(&project, &["ps", "--json"]);
+    assert!(current.status.success(), "stderr: {:?}", current.stderr);
+    let current: Value =
+        serde_json::from_slice(&current.stdout).expect("current ps should be JSON");
+    let current_records = current["data"]
+        .as_array()
+        .expect("current data should be an array");
+    assert_eq!(current_records.len(), 1);
+    assert_eq!(current_records[0]["key"]["name"], "root");
+    assert_eq!(
+        current_records[0]["key"]["project_path"],
+        project.to_string_lossy().as_ref()
+    );
+
+    let subtree = environment.run_from(&project, &["ps", "--scope", "subtree", "--json"]);
+    assert!(subtree.status.success(), "stderr: {:?}", subtree.stderr);
+    let subtree: Value =
+        serde_json::from_slice(&subtree.stdout).expect("subtree ps should be JSON");
+    assert_eq!(subtree["data"]["scope"], "subtree");
+    let subtree_records = subtree["data"]["records"]
+        .as_array()
+        .expect("subtree records should be an array");
+    assert_eq!(subtree_records.len(), 2);
+    assert!(subtree_records.iter().all(|record| {
+        record["key"]["project_path"] == project.to_string_lossy().as_ref()
+            || record["key"]["project_path"] == nested.to_string_lossy().as_ref()
+    }));
+    assert!(
+        !subtree_records
+            .iter()
+            .any(|record| record["key"]["project_path"] == sibling.to_string_lossy().as_ref())
+    );
+
+    let global = environment.run_from(&project, &["ps", "--scope", "global", "--json"]);
+    assert!(global.status.success(), "stderr: {:?}", global.stderr);
+    let global: Value = serde_json::from_slice(&global.stdout).expect("global ps should be JSON");
+    assert_eq!(global["data"]["scope"], "global");
+    let global_records = global["data"]["records"]
+        .as_array()
+        .expect("global records should be an array");
+    assert_eq!(global_records.len(), 3);
+    let projects = global_records
+        .iter()
+        .map(|record| {
+            record["key"]["project_path"]
+                .as_str()
+                .expect("project path")
+        })
+        .collect::<Vec<_>>();
+    assert!(projects.windows(2).all(|pair| pair[0] <= pair[1]));
+
+    let human = environment.run_from(&project, &["ps", "--scope", "subtree"]);
+    assert!(human.status.success(), "stderr: {:?}", human.stderr);
+    let human = String::from_utf8_lossy(&human.stdout);
+    assert!(human.starts_with("PROJECT"));
+    assert!(human.contains(project.to_string_lossy().as_ref()));
+    assert!(human.contains(nested.to_string_lossy().as_ref()));
+    assert!(!human.contains(sibling.to_string_lossy().as_ref()));
 }
 
 #[test]

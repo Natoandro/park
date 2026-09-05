@@ -18,6 +18,10 @@ records before launching a named process:
 park ps --json
 ```
 
+Use `park ps --scope subtree` or `park ps --scope global` for explicit broader
+discovery. `status` and lifecycle commands continue to target the exact current
+project key.
+
 Choose a stable, descriptive name such as `dev`, `api`, `worker`, or `frontend`.
 Names are project-scoped, but a duplicate name in the same project is rejected.
 Do not stop, remove, or replace an existing record just to make a name available.
