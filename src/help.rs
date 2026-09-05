@@ -15,6 +15,10 @@ pub fn skills_help_result(json_output: bool) -> CommandResult<Value> {
     }
 }
 
+pub fn command_help_result() -> CommandResult<Value> {
+    CommandResult::success(Some(json!({"content": crate::cli::command_help()})), None)
+}
+
 fn skills_guide() -> &'static str {
     "Park AI agent integration\n\nInstall the canonical skill:\n  Project: npx skills add Natoandro/park --skill park\n  Global:  npx skills add Natoandro/park --skill park -g\n\nThe default install commands detect available agents and let you choose when\nneeded. To target one agent explicitly, add -a <agent>, for example:\n  npx skills add Natoandro/park --skill park -a opencode\n\nUse it once without installing (prints a prompt):\n  npx skills use Natoandro/park --skill park\n\nTo start a specific supported agent, add --agent <agent>.\n\nRecommended workflow:\n  1. Run from the project directory associated with the process.\n  2. Inspect records: park ps --json\n  3. Launch: park <name> -- <command> [arguments...]\n  4. Wait for running or readiness output with park wait.\n  5. Diagnose with park status <name> --json and park logs <name>.\n  6. Stop or remove only records belonging to the task.\n\nSkill maintenance:\n  npx skills update park\n  npx skills remove park\n"
 }
@@ -69,5 +73,15 @@ mod tests {
         let data = result.data.expect("guide data");
         assert_eq!(data["name"], "park");
         assert_eq!(data["install"]["project"], PROJECT_INSTALL);
+    }
+
+    #[test]
+    fn renders_command_help() {
+        let result = command_help_result();
+        assert!(result.ok);
+        let data = result.data.expect("help data");
+        let content = data["content"].as_str().expect("help content");
+        assert!(content.contains("logs     Read retained process output"));
+        assert!(content.contains("The launch form is"));
     }
 }

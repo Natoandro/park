@@ -21,4 +21,4 @@ Use the command pages for the complete behavior of each operation:
 - [Configuration](../configuration.md) describes optional user-scoped daemon and
   restart policies.
 - [AI Agent Integration](../ai-agents.md) install the Park skill and discover the
-  agent workflow with `park help --skills`.
+  agent workflow with `park help --skill`.

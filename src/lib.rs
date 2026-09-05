@@ -30,7 +30,7 @@ pub use daemon::{
     DaemonError, DaemonPhase, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT,
     run as run_daemon,
 };
-pub use help::skills_help_result;
+pub use help::{command_help_result, skills_help_result};
 pub use ipc::{
     IpcError, IpcLogOptions, IpcOperation, IpcRequest, IpcResponse, request_for_clean,
     request_for_daemon_config, request_for_daemon_status, request_for_launch, request_for_logs,

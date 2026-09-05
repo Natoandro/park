@@ -119,18 +119,26 @@ fn parses_long_operation_alias() {
 #[test]
 fn parses_skills_help() {
     assert_eq!(
-        parse(&["park", "help", "--skills"]),
+        parse(&["park", "help", "--skill"]),
         Invocation::Operation(Operation::HelpSkills { json: false })
     );
     assert_eq!(
-        parse(&["park", "help", "--skills", "--json"]),
+        parse(&["park", "help", "--skill", "--json"]),
         Invocation::Operation(Operation::HelpSkills { json: true })
     );
 }
 
 #[test]
-fn requires_a_help_topic() {
-    assert!(parse_invocation(["park", "help"] as [&str; 2]).is_err());
+fn parses_general_help() {
+    assert_eq!(
+        parse(&["park", "help"]),
+        Invocation::Operation(Operation::Help)
+    );
+}
+
+#[test]
+fn json_help_requires_a_topic() {
+    assert!(parse_invocation(["park", "help", "--json"] as [&str; 3]).is_err());
 }
 
 #[test]

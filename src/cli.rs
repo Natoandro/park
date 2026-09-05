@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 
-use clap::{ArgGroup, Args, Parser, Subcommand};
+use clap::{ArgGroup, Args, CommandFactory, Parser, Subcommand};
 use std::num::ParseIntError;
 
 use crate::lifecycle::ProcessState;
@@ -38,6 +38,7 @@ pub enum Operation {
     Clean,
     Wait(WaitArgs),
     Daemon(DaemonOperation),
+    Help,
     HelpSkills { json: bool },
 }
 
@@ -91,22 +92,50 @@ pub struct WaitArgs {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "park", version, about = "Project-scoped local process manager")]
+#[command(
+    name = "park",
+    version,
+    about = "Project-scoped local process manager",
+    after_help = "Launch a command with:\n  park <NAME> -- <COMMAND> [ARGUMENTS...]\n\nThe explicit equivalent is:\n  park run <NAME> -- <COMMAND> [ARGUMENTS...]\n\nRecords are scoped to the current project directory. Use `park help --skill`\nfor AI-agent integration instructions."
+)]
 struct LaunchCli {
-    #[arg(value_name = "NAME", allow_hyphen_values = true)]
+    #[arg(
+        value_name = "NAME",
+        allow_hyphen_values = true,
+        help = "Name for the retained process record"
+    )]
     name: OsString,
 
-    #[arg(last = true, required = true, value_name = "COMMAND")]
+    #[arg(
+        last = true,
+        required = true,
+        value_name = "COMMAND",
+        help = "Command and arguments after `--`"
+    )]
     command: Vec<OsString>,
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "park run", version, about = "Start a named command")]
+#[command(
+    name = "park run",
+    version,
+    about = "Start a named command",
+    after_help = "The command begins after the `--` separator and is retained for\nfuture lifecycle operations."
+)]
 struct RunCli {
-    #[arg(value_name = "NAME", allow_hyphen_values = true)]
+    #[arg(
+        value_name = "NAME",
+        allow_hyphen_values = true,
+        help = "Name for the retained process record"
+    )]
     name: OsString,
 
-    #[arg(last = true, required = true, value_name = "COMMAND")]
+    #[arg(
+        last = true,
+        required = true,
+        value_name = "COMMAND",
+        help = "Command and arguments after `--`"
+    )]
     command: Vec<OsString>,
 }
 
@@ -115,129 +144,215 @@ struct RunCli {
     name = "park",
     version,
     about = "Project-scoped local process manager",
-    disable_help_subcommand = true
+    disable_help_subcommand = true,
+    after_help = "The launch form is `park <NAME> -- <COMMAND> [ARGUMENTS...]`.\n\nUse `park help --skill` for AI-agent integration instructions."
 )]
 struct OperationCli {
     #[command(subcommand)]
     operation: OperationCliCommand,
 }
 
+pub(crate) fn command_help() -> String {
+    OperationCli::command().render_long_help().to_string()
+}
+
 #[derive(Debug, Subcommand)]
 enum OperationCliCommand {
-    #[command(name = "ps")]
+    #[command(name = "ps", about = "List records in the current project")]
     Ps {
-        #[arg(long)]
+        #[arg(long, help = "Render machine-readable JSON")]
         json: bool,
     },
-    #[command(name = "status")]
+    #[command(name = "status", about = "Show the status of one record")]
     Status {
-        #[arg(value_name = "NAME", allow_hyphen_values = true)]
+        #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
         name: OsString,
-        #[arg(long)]
+        #[arg(long, help = "Render machine-readable JSON")]
         json: bool,
     },
-    #[command(name = "logs")]
+    #[command(
+        name = "logs",
+        about = "Read retained process output",
+        after_help = "Without --stdout or --stderr, output is stdout followed by stderr.\n--grep uses a literal substring and filtering happens before --head or --tail.\nWith --follow, new output is streamed as it is appended."
+    )]
     Logs(LogsCliArgs),
-    #[command(name = "stop")]
+    #[command(
+        name = "stop",
+        about = "Stop a managed process group",
+        after_help = "Sends SIGTERM and escalates to SIGKILL after the grace period.\nUse --force to send SIGKILL immediately."
+    )]
     Stop {
-        #[arg(value_name = "NAME", allow_hyphen_values = true)]
+        #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
         name: OsString,
-        #[arg(long)]
+        #[arg(long, help = "Send SIGKILL immediately")]
         force: bool,
     },
-    #[command(name = "restart")]
+    #[command(
+        name = "restart",
+        about = "Restart a retained process record",
+        after_help = "Restarts the recorded command in its project and appends new\noutput to the existing stdout and stderr logs."
+    )]
     Restart {
-        #[arg(value_name = "NAME", allow_hyphen_values = true)]
+        #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
         name: OsString,
     },
-    #[command(name = "start")]
+    #[command(
+        name = "start",
+        about = "Start a retained terminal record",
+        after_help = "Starts a stopped terminal record using its recorded command.\nUse the launch form to create a new record."
+    )]
     Start {
-        #[arg(value_name = "NAME", allow_hyphen_values = true)]
+        #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
         name: OsString,
     },
-    #[command(name = "signal")]
+    #[command(
+        name = "signal",
+        about = "Send a signal to a managed process group",
+        after_help = "Supported names: HUP, INT, QUIT, TERM, USR1, USR2, STOP,\nCONT, and KILL, with an optional SIG prefix."
+    )]
     Signal {
-        #[arg(value_name = "NAME", allow_hyphen_values = true)]
+        #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
         name: OsString,
-        #[arg(value_name = "SIGNAL")]
+        #[arg(
+            value_name = "SIGNAL",
+            help = "Signal name, with or without the SIG prefix"
+        )]
         signal: String,
     },
-    #[command(name = "rm")]
+    #[command(
+        name = "rm",
+        about = "Remove a retained process record",
+        after_help = "Active records cannot be removed. Logs are removed unless\n--keep-logs is supplied."
+    )]
     Rm {
-        #[arg(value_name = "NAME", allow_hyphen_values = true)]
+        #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
         name: OsString,
-        #[arg(long)]
+        #[arg(long, help = "Keep the record's stdout and stderr logs")]
         keep_logs: bool,
     },
-    #[command(name = "clean")]
+    #[command(
+        name = "clean",
+        about = "Remove eligible terminal records",
+        after_help = "Removes terminal records whose managed process group is gone.\nActive records are never removed."
+    )]
     Clean,
-    #[command(name = "wait")]
+    #[command(
+        name = "wait",
+        about = "Wait for a record state or output",
+        after_help = "Choose exactly one of --state, --match, or --exit.\n--timeout accepts a non-negative duration ending in ms, s, or m."
+    )]
     Wait(WaitCliArgs),
-    #[command(name = "daemon")]
+    #[command(
+        name = "daemon",
+        about = "Manage the per-user Park daemon",
+        after_help = "Daemon commands use the per-user runtime and state directories."
+    )]
     Daemon {
         #[command(subcommand)]
         operation: DaemonCliCommand,
     },
-    #[command(name = "help")]
+    #[command(
+        name = "help",
+        about = "Show command help or integration guidance",
+        after_help = "Without an option, prints the same command overview as park --help.\nUse --skill for AI-agent integration instructions."
+    )]
     Help {
-        #[arg(long, required = true)]
+        #[arg(
+            long = "skill",
+            visible_alias = "skills",
+            help = "Show AI-agent integration instructions"
+        )]
         skills: bool,
-        #[arg(long)]
+        #[arg(long, requires = "skills", help = "Render machine-readable JSON")]
         json: bool,
     },
 }
 
 #[derive(Debug, Subcommand)]
 enum DaemonCliCommand {
-    #[command(name = "status")]
+    #[command(name = "status", about = "Show daemon status")]
     Status {
-        #[arg(long)]
+        #[arg(long, help = "Render machine-readable JSON")]
         json: bool,
     },
-    #[command(name = "reexec")]
+    #[command(
+        name = "reexec",
+        about = "Request a daemon re-exec",
+        after_help = "Daemon re-exec is reserved for the handoff workflow and is\ncurrently not implemented."
+    )]
     Reexec {
-        #[arg(long)]
+        #[arg(long, help = "Force the re-exec request")]
         force: bool,
     },
-    #[command(name = "config")]
+    #[command(name = "config", about = "Show effective daemon configuration")]
     Config {
-        #[arg(long)]
+        #[arg(long, help = "Render machine-readable JSON")]
         json: bool,
     },
 }
 
 #[derive(Debug, Args)]
 struct LogsCliArgs {
-    #[arg(value_name = "NAME", allow_hyphen_values = true)]
+    #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
     name: OsString,
-    #[arg(long, value_name = "N", conflicts_with = "head")]
+    #[arg(
+        long,
+        value_name = "N",
+        conflicts_with = "head",
+        help = "Show at most N retained lines"
+    )]
     tail: Option<u64>,
-    #[arg(long, value_name = "N", conflicts_with = "tail")]
+    #[arg(
+        long,
+        value_name = "N",
+        conflicts_with = "tail",
+        help = "Show the first N retained lines"
+    )]
     head: Option<u64>,
-    #[arg(long)]
+    #[arg(long, help = "Continue streaming output as it is appended")]
     follow: bool,
-    #[arg(long = "grep", value_name = "PATTERN")]
+    #[arg(
+        long = "grep",
+        value_name = "PATTERN",
+        help = "Keep lines containing this literal substring"
+    )]
     grep: Option<String>,
-    #[arg(long, conflicts_with = "stderr")]
+    #[arg(long, conflicts_with = "stderr", help = "Show stdout only")]
     stdout: bool,
-    #[arg(long, conflicts_with = "stdout")]
+    #[arg(long, conflicts_with = "stdout", help = "Show stderr only")]
     stderr: bool,
-    #[arg(long)]
+    #[arg(long, help = "Render machine-readable JSON")]
     json: bool,
 }
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("wait-condition").required(true)))]
 struct WaitCliArgs {
-    #[arg(value_name = "NAME", allow_hyphen_values = true)]
+    #[arg(value_name = "NAME", allow_hyphen_values = true, help = "Record name")]
     name: OsString,
-    #[arg(long, value_name = "STATE", group = "wait-condition", value_parser = parse_state)]
+    #[arg(
+        long,
+        value_name = "STATE",
+        group = "wait-condition",
+        value_parser = parse_state,
+        help = "Wait until the record reaches this state"
+    )]
     state: Option<ProcessState>,
-    #[arg(long = "match", value_name = "TEXT", group = "wait-condition")]
+    #[arg(
+        long = "match",
+        value_name = "TEXT",
+        group = "wait-condition",
+        help = "Wait for this literal text in retained output"
+    )]
     match_text: Option<String>,
-    #[arg(long, group = "wait-condition")]
+    #[arg(long, group = "wait-condition", help = "Wait until the record exits")]
     exit: bool,
-    #[arg(long, value_name = "DURATION", value_parser = parse_duration)]
+    #[arg(
+        long,
+        value_name = "DURATION",
+        value_parser = parse_duration,
+        help = "Fail after a duration ending in ms, s, or m"
+    )]
     timeout: Option<u64>,
 }
 
@@ -321,6 +436,7 @@ fn validate_operation_name(operation: &Operation) -> Result<(), clap::Error> {
         Operation::Ps { .. }
         | Operation::Clean
         | Operation::Daemon(_)
+        | Operation::Help
         | Operation::HelpSkills { .. } => None,
     };
     if let Some(name) = name {
@@ -383,7 +499,13 @@ impl From<OperationCliCommand> for Operation {
                 DaemonCliCommand::Reexec { force } => DaemonOperation::Reexec { force },
                 DaemonCliCommand::Config { json } => DaemonOperation::Config { json },
             }),
-            OperationCliCommand::Help { json, .. } => Self::HelpSkills { json },
+            OperationCliCommand::Help { skills, json } => {
+                if skills {
+                    Self::HelpSkills { json }
+                } else {
+                    Self::Help
+                }
+            }
         }
     }
 }

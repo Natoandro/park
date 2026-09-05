@@ -11,8 +11,8 @@ Integration](../ai-agents.md).
 The agent integration guide is also available without daemon access:
 
 ```bash
-park help --skills
-park help --skills --json
+park help --skill
+park help --skill --json
 ```
 
 ## JSON Output

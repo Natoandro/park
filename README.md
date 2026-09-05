@@ -121,8 +121,8 @@ supported agent.
 Discover the integration guide from the installed binary:
 
 ```bash
-park help --skills
-park help --skills --json
+park help --skill
+park help --skill --json
 ```
 
 See [AI Agent Integration](docs/src/ai-agents.md) for other supported agents,
@@ -239,7 +239,8 @@ park env <name> [--json]
 park env <name> [--set KEY=VALUE]... [--unset KEY]... [--json]
 park daemon status [--json]
 park daemon config [--json]
-park help --skills [--json]
+park help
+park help --skill [--json]
 ```
 
 `park logs` is the canonical log interface. `park daemon status` and `park daemon config` inspect the per-user daemon without selecting a project. JSON output, stable exit codes, predictable lookup, and non-interactive operation are public requirements because Park is intended to work well in scripts and coding-agent workflows.

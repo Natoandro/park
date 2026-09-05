@@ -2,10 +2,10 @@ use std::{env, io::Write, process};
 
 use park_cli::{
     CommandResult, INTERNAL_DAEMON_ARGUMENT, INTERNAL_SUPERVISOR_ARGUMENT, Invocation,
-    IpcLogOptions, Operation, ResultStatus, StoragePaths, parse_invocation, render_json,
-    request_for_clean, request_for_daemon_config, request_for_daemon_status, request_for_launch,
-    request_for_logs, request_for_ps, request_for_remove, request_for_restart, request_for_signal,
-    request_for_start, request_for_status, request_for_stop, request_for_wait,
+    IpcLogOptions, Operation, ResultStatus, StoragePaths, command_help_result, parse_invocation,
+    render_json, request_for_clean, request_for_daemon_config, request_for_daemon_status,
+    request_for_launch, request_for_logs, request_for_ps, request_for_remove, request_for_restart,
+    request_for_signal, request_for_start, request_for_status, request_for_stop, request_for_wait,
     request_with_daemon_start, resolve_current_project, run_daemon, skills_help_result,
     stream_request_with_daemon_start,
 };
@@ -143,6 +143,9 @@ fn supervisor_usage_error(message: &str) -> ! {
 }
 
 async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> CommandResult<Value> {
+    if let Invocation::Operation(Operation::Help) = &invocation {
+        return command_help_result();
+    }
     if let Invocation::Operation(Operation::HelpSkills { json }) = &invocation {
         return skills_help_result(*json);
     }
@@ -277,7 +280,7 @@ async fn execute(invocation: Invocation, on_follow: &mut dyn FnMut(&str)) -> Com
             };
             return CommandResult::success(data.get("record").cloned(), None);
         }
-        Invocation::Operation(Operation::HelpSkills { .. }) => {
+        Invocation::Operation(Operation::Help | Operation::HelpSkills { .. }) => {
             unreachable!("skills help is handled before daemon setup")
         }
         Invocation::Operation(Operation::Daemon(_)) => {

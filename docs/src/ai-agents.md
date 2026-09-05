@@ -68,13 +68,13 @@ semantics. See [Quick Start](quick-start.md) for the complete command workflow.
 The installed binary provides a version-matched summary of the integration:
 
 ```bash
-park help --skills
+park help --skill
 ```
 
 Use `--json` when an agent needs to discover the guide programmatically:
 
 ```bash
-park help --skills --json
+park help --skill --json
 ```
 
 The JSON result uses Park's standard result envelope. Its `data` includes the
