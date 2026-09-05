@@ -20,6 +20,7 @@ Use this checklist for recurring reviews of Park changes. Reviewers should focus
 - [ ] The CLI canonicalizes the invocation directory before creating lookup keys.
 - [ ] The daemon independently canonicalizes every project path received over IPC.
 - [ ] Relative, nonexistent, non-directory, and symlink-alias project paths have intentional, tested behavior.
+- [ ] `ps --scope` accepts only the documented enum, defaults to the exact current project, applies path-boundary-safe subtree filtering, and makes non-current human listings unambiguous.
 
 ## IPC And Daemon Startup
 

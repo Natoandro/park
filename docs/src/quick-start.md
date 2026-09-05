@@ -37,7 +37,9 @@ park status dev --json
 
 `ps` and `status` use the current project's canonical path. Records remain
 available after their commands exit, allowing status and output to be inspected
-later.
+later. The planned `park ps --scope subtree` form includes records in the
+current directory and its descendants; `park ps --scope global` lists all
+retained records for the user.
 
 ## Read Logs
 

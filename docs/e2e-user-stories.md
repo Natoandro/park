@@ -518,6 +518,35 @@ identifiers should be checked for consistency, not fixed values.
   updates are durable explicit overrides; a running process is unchanged; the
   next spawn uses the updates; JSON output is deterministic and stable.
 
+### PARK-INSPECT-008: List a project subtree explicitly
+
+- **Scope:** Scoped process listing
+- **Priority:** P1
+- **Actor:** Developer
+- **Story:** As a developer working in a nested project directory, I want to
+  include records from its descendants, so that I can inspect related commands
+  without changing the default exact-project behavior.
+- **Preconditions:** Records exist in the current canonical directory, a nested
+  canonical directory, and a sibling or unrelated directory.
+- **Scenario:** Run `park ps --scope subtree` and repeat with `--json`.
+- **Acceptance criteria:** The current and descendant records appear; sibling
+  and unrelated paths do not; path-prefix matching respects directory
+  boundaries; non-current human rows include the canonical project path; JSON
+  retains the complete project key.
+
+### PARK-INSPECT-009: List all retained records explicitly
+
+- **Scope:** Global process listing
+- **Priority:** P1
+- **Actor:** Coding agent
+- **Story:** As an automation client, I want to inspect all retained records,
+  so that I can discover processes across projects when explicitly requested.
+- **Preconditions:** Records exist in multiple canonical project directories.
+- **Scenario:** Run `park ps --scope global --json`.
+- **Acceptance criteria:** Every retained record for the user is returned in
+  deterministic project-path-then-name order; each record includes its complete
+  project key; the default `park ps` remains limited to the current project.
+
 ## Logs
 
 ### PARK-LOG-001: Read combined logs

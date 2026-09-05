@@ -4,7 +4,7 @@ Lifecycle and inspection commands target records in the canonicalized current
 project directory. The readable subcommand forms are:
 
 ```text
-park ps [--json]
+park ps [--scope SCOPE] [--json]
 park status <name> [--json]
 park stop <name> [--force]
 park restart <name>
@@ -24,10 +24,24 @@ The operation commands also accept long-option aliases such as
 
 ## Inspect
 
-`ps` lists the retained process records for the current project. `status`
-selects one record by name. Records remain available after the managed command
-exits, so both commands can inspect historical outcomes as well as active
-processes.
+`ps` lists retained process records and defaults to the canonical current
+project. Its planned `--scope` values are:
+
+- `current`: the exact current project directory (the default).
+- `subtree`: the current directory and canonical project paths below it.
+- `global`: every retained record in the user's Park state.
+
+The scope changes listing only. `status` selects one record by name, and
+lifecycle commands continue to target the exact current-project key. Records
+remain available after the managed command exits, so both commands can inspect
+historical outcomes as well as active processes.
+
+The initial interface uses `--scope SCOPE` rather than separate boolean flags
+such as `--global` or `--subtree`. An `ancestors` scope is deferred until a
+clear workflow justifies its path and boundary semantics.
+
+For a non-current scope, human `ps` output includes the canonical project path
+before the record name. JSON output always retains the complete project key.
 
 Without `--json`, `ps` prints a human-readable process table and `status` prints
 human-readable record details. With `--json`, both commands emit the stable JSON

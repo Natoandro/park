@@ -223,7 +223,7 @@ release instructions.
 
 ```text
 park <name> [--env-file <path>]... -- <command> [arguments...]
-park ps [--json]
+park ps [--scope SCOPE] [--json]
 park status <name> [--json]
 park logs <name> [--tail N|--head N] [--follow] [--grep PATTERN] [--stdout|--stderr] [--json]
 park stop <name> [--force]
@@ -244,6 +244,15 @@ park help --skill [--json]
 ```
 
 `park logs` is the canonical log interface. `park daemon status` and `park daemon config` inspect the per-user daemon without selecting a project. JSON output, stable exit codes, predictable lookup, and non-interactive operation are public requirements because Park is intended to work well in scripts and coding-agent workflows.
+
+`park ps` defaults to the canonical current directory. Its planned `--scope`
+option accepts `current`, `subtree` (the current directory and descendants), or
+`global` (all retained records for the user). The scope applies only to listing;
+`status` and lifecycle commands continue to target an exact current-project key.
+Scoped human listings include the project path so records with the same name are
+not ambiguous. Separate `--global` and `--subtree` flags are intentionally not
+part of the initial interface; `ancestors` may be added later if a clear
+monorepo workflow requires it.
 
 `stop` sends SIGTERM to the managed process group and escalates to SIGKILL after a two-second grace period; `--force` sends SIGKILL immediately. `signal` accepts `HUP`, `INT`, `QUIT`, `TERM`, `USR1`, `USR2`, `STOP`, `CONT`, and `KILL`, with an optional `SIG` prefix. Numeric signal values are not accepted. `restart` stops an active process before starting it again from its recorded command and environment inputs. `--recapture-env` captures the calling client's environment and enables repeatable `--env-file` arguments. `start` without a command starts a retained terminal record; `start <name> -- <command>...` creates a record when the key is unused. Restart and start append to the existing stream logs.
 

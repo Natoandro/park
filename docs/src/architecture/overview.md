@@ -99,8 +99,10 @@ later milestone.
 The command and argument vector are preserved exactly. Later `restart` and
 `start` operations use those recorded arguments and the recorded working
 directory rather than reconstructing a shell command. Inspection and lifecycle
-operations are resolved within the current canonical project, and retained
-records remain available after exit.
+operations are resolved within the current canonical project by default, and
+retained records remain available after exit. A planned `ps --scope` extension
+will allow explicit subtree or global inspection without broadening the target
+scope of `status` or lifecycle operations.
 
 The launch client captures its complete environment and sends it to the daemon.
 The daemon, not the client, reads any requested dotenv files and resolves the
