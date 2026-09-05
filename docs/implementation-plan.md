@@ -203,20 +203,20 @@ Phase 8 implementation decisions:
 
 ## Phase 9: Environment Inputs and Extended Start
 
-- [ ] Extend launch parsing with repeatable `--env-file <path>` options before the command separator.
-- [ ] Capture the complete client environment for initial launch and explicit `start <name> -- <command>...` creation.
-- [ ] Carry lossless client environment entries and dotenv paths over versioned IPC; the client must not read dotenv files.
-- [ ] Resolve and parse dotenv files in the daemon for every process spawn.
-- [ ] Define and implement the restricted dotenv grammar without shell evaluation, command substitution, or implicit execution.
-- [ ] Persist the client capture, ordered dotenv paths, and explicit environment overrides/removals without persisting the merged result.
-- [ ] Add the required SQLite schema migration and validation for environment inputs.
-- [ ] Spawn with the resolved environment rather than inheriting the daemon environment, including using the resolved `PATH` for executable lookup.
-- [ ] Add `restart --recapture-env` to replace the stored client capture only through an explicit request, and accept repeatable `--env-file <path>` options only with that flag.
-- [ ] Make `start <name> -- <command>...` create a new record only for an unused project/name key while preserving duplicate protection.
-- [ ] Implement `park env <name>` inspection with deterministic human and JSON output.
-- [ ] Implement `park env --set KEY=VALUE` and `--unset KEY` as persistent per-record overrides/removals that affect only future spawns.
-- [ ] Preflight environment resolution before stopping an active process for restart, so an invalid dotenv file does not cause avoidable downtime.
-- [ ] Test capture, dotenv precedence and rereading, server-side file access, missing/invalid files, explicit updates, recapture, restart behavior, and new-record `start` behavior.
+- [x] Extend launch parsing with repeatable `--env-file <path>` options before the command separator.
+- [x] Capture the complete client environment for initial launch and explicit `start <name> -- <command>...` creation.
+- [x] Carry lossless client environment entries and dotenv paths over versioned IPC; the client must not read dotenv files.
+- [x] Resolve and parse dotenv files in the daemon for every process spawn.
+- [x] Define and implement the restricted dotenv grammar without shell evaluation, command substitution, or implicit execution.
+- [x] Persist the client capture, ordered dotenv paths, and explicit environment overrides/removals without persisting the merged result.
+- [x] Add the required SQLite schema migration and validation for environment inputs.
+- [x] Spawn with the resolved environment rather than inheriting the daemon environment, including using the resolved `PATH` for executable lookup.
+- [x] Add `restart --recapture-env` to replace the stored client capture only through an explicit request, and accept repeatable `--env-file <path>` options only with that flag.
+- [x] Make `start <name> -- <command>...` create a new record only for an unused project/name key while preserving duplicate protection.
+- [x] Implement `park env <name>` inspection with deterministic human and JSON output.
+- [x] Implement `park env --set KEY=VALUE` and `--unset KEY` as persistent per-record overrides/removals that affect only future spawns.
+- [x] Preflight environment resolution before stopping an active process for restart, so an invalid dotenv file does not cause avoidable downtime.
+- [x] Test capture, dotenv precedence and rereading, server-side file access, missing/invalid files, explicit updates, recapture, restart behavior, and new-record `start` behavior.
 
 Phase 9 implementation decisions:
 
@@ -225,7 +225,7 @@ Phase 9 implementation decisions:
 - Relative dotenv paths are resolved by the daemon from the canonical project directory. The daemon reads files as data and reports read or parse errors without spawning a child. Restart evaluates them before stopping an active group.
 - `park env` displays the currently resolved environment. Its `--set` and `--unset` options edit explicit record-level overrides; they cannot mutate the environment of an already running process.
 - `start <name>` retains its existing-record behavior. With `-- <command>...`, it creates a new record only when no record exists for the complete canonical project/name key; an existing retained record returns a duplicate result.
-- Environment values may contain `=`; the first separator in `KEY=VALUE` is structural. Dotenv parsing is data-only and must not execute shell syntax. A third-party dotenv parser is not approved yet; compare a small internal parser with candidate crates before implementation and record any approval here.
+- Environment values may contain `=`; the first separator in `KEY=VALUE` is structural. Dotenv parsing is data-only and must not execute shell syntax. A small internal parser was selected over a third-party dotenv crate so the accepted grammar and execution boundary remain explicit without adding a dependency.
 
 ## Roadmap
 

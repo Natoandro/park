@@ -95,6 +95,9 @@ Use `park env <name>` to inspect the effective environment, or update future
 spawns with `--set KEY=VALUE` and `--unset KEY`. Environment updates do not
 change an already running process. Environment captures can contain secrets, so
 only inspect them when needed and treat the Park state directory as sensitive.
+Use `--json` when an agent needs to inspect variables without parsing human
+output. Dotenv files support data-only assignments, optional `export`, comments,
+and quoted values; they are never evaluated as shell code.
 
 Records remain available after exit. Use `park rm <name>` only for an inactive
 record when its history is no longer needed. Do not use `park clean` as a broad

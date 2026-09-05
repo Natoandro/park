@@ -1,6 +1,6 @@
 # Park Agent Guide
 
-- This repository is currently a design baseline; no Rust workspace, test suite, formatter, CI configuration, or executable entrypoint exists yet. Do not invent verification commands or claim they were run.
+- The implementation is a Rust workspace with a `park` executable and focused unit/integration tests. Use the repository's documented Cargo checks; do not claim checks were run unless they were actually run.
 - The implementation language is Rust. Before adding any third-party crate that is not near-universal Rust tooling (for example, `clap` or `serde`), present its purpose and alternatives and obtain explicit user approval. Record approved dependencies and their rationale in the implementation plan or manifest comments.
 - `README.md` defines the user-facing product contract. `docs/architecture.md` defines component boundaries; `docs/low-level-architecture.md` defines persistence, IPC, and lifecycle invariants. Keep all three aligned when changing behavior.
 - The crates.io package is `park-cli`; the installed binary and every user-facing command use `park`.

@@ -23,6 +23,8 @@ The current feature set includes:
 - Status, log inspection, filtering, following, signals, stop, restart, start,
   removal, cleanup, and wait operations.
 - Stable JSON output and lifecycle exit codes for scripts and coding agents.
+- Client environment capture, daemon-side dotenv loading, and the `park env`
+  inspection/update command.
 - Optional global configuration file parsing and validation for daemon and
   managed-process policies.
 - Daemon runtime and effective configuration inspection through `park daemon
@@ -62,8 +64,6 @@ The following capabilities are not yet implemented:
 - Explicit reboot recovery policies.
 - Graceful daemon upgrades that preserve active managed processes.
 - Log rotation, retention, pruning, and compression.
-- Client environment capture, server-side dotenv loading, and the `park env`
-  inspection/update command.
 - Faster and richer log queries, structured log metadata, and optional external
   log export.
 

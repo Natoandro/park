@@ -54,8 +54,8 @@ locations before a record can be listed, reconciled, or removed.
 The exact argument vector is authoritative. A human-readable command string is
 only derived presentation data and is never used to reconstruct a restart.
 
-The current SQLite schema is version 1, recorded with SQLite's
-`PRAGMA user_version`. The normalized tables are:
+The current SQLite schema is version 2, recorded with SQLite's
+`PRAGMA user_version`. The metadata tables are:
 
 - `process_records` stores the process key, executable, lifecycle identifiers,
   timestamps, state, exit information, and failure reason as individual fields.
@@ -63,11 +63,11 @@ The current SQLite schema is version 1, recorded with SQLite's
 - `process_arguments` stores one raw argument BLOB per zero-based position,
   keyed by the process record digest.
 
-The environment extension will add normalized storage for the captured client
-entries, ordered dotenv file paths, and explicit per-record overrides/removals.
-Those inputs must be updated transactionally with the record. A later schema
-version must not replace them with a serialized merged environment, because
-dotenv files are intentionally reevaluated at spawn time.
+The environment source inputs are stored in three JSON-encoded BLOB columns on
+`process_records`: the captured entries, ordered dotenv paths, and explicit
+overrides/removals. The encoded entries use Park's lossless OS-string format and
+are updated transactionally with the record. They are not a serialized merged
+environment, because dotenv files are intentionally reevaluated at spawn time.
 
 Storing process names as SQLite `TEXT` is not yet implemented and is tracked on
 the [roadmap](../../implementation-plan.md#roadmap).

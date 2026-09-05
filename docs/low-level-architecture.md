@@ -14,7 +14,7 @@ Persist one record per canonical `(project_path, name)` key. A record requires:
 - state, exit code, and termination signal
 - paths to stdout and stderr logs
 
-Use a separate human-readable command display only as derived presentation data. Process records must remain after exit so `status` and `logs` can report historical outcomes. SQLite schema version 1 stores scalar record metadata in `process_records`, lossless Unix identity and executable values as BLOB columns, and ordered command arguments in `process_arguments`. Working-directory and log paths are derived from the process key. Every read validates lifecycle-field consistency, derived record/log locations, and working-directory/key consistency before the record can be listed, reconciled, or removed.
+Use a separate human-readable command display only as derived presentation data. Process records must remain after exit so `status` and `logs` can report historical outcomes. SQLite schema version 2 stores scalar record metadata plus serialized, lossless environment inputs in `process_records`, with lossless Unix identity and executable values as BLOB columns and ordered command arguments in `process_arguments`. Environment inputs are serialized source data, never the merged environment. A version-1 database is migrated by adding the source columns and backfilling legacy records with the environment available during migration. Working-directory and log paths are derived from the process key. Every read validates lifecycle-field consistency, environment inputs, derived record/log locations, and working-directory/key consistency before the record can be listed, reconciled, or removed.
 
 ## Project Resolution
 

@@ -170,6 +170,8 @@ Park is intended for:
 - [x] Durable process records with separate, retained stdout and stderr logs.
 - [x] Status, log inspection, filtering, following, signals, graceful stop, restart, start, removal, cleanup, and wait operations.
 - [x] Stable JSON output and lifecycle exit codes for scripts and coding agents.
+- [x] Captured client environments, repeatable dotenv files, and per-record
+  environment inspection and updates.
 
 ### Not Yet Implemented
 
@@ -177,8 +179,6 @@ Park is intended for:
 - [ ] Filesystem-triggered restarts for development workflows.
 - [ ] Additional coordination support for shared human-and-agent workflows.
 - [ ] Optional project configuration with `park up` and `park down`.
-- [ ] Captured client environments, repeatable dotenv files, and per-record
-  environment inspection and updates.
 - [ ] Broader platform-specific process-ownership and lifecycle guarantees.
 - [ ] Log rotation, retention, and pruning.
 - [ ] Graceful daemon upgrades that preserve active managed processes.
